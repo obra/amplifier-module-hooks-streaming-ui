@@ -1,0 +1,20 @@
+[project]
+name = "amplifier-module-hooks-streaming-ui"
+version = "1.0.0"
+description = "Streaming UI display hooks for Amplifier - displays thinking blocks and tool invocations to console"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "amplifier-core",
+]
+
+[project.entry-points."amplifier.modules"]
+hooks-streaming-ui = "amplifier_module_hooks_streaming_ui:mount"
+
+[tool.uv.sources.amplifier-core]
+path = "../amplifier-core"
+editable = true
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
