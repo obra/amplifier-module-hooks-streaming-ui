@@ -1,6 +1,6 @@
 """Streaming UI Hooks Module
 
-Display streaming LLM output (thinking blocks and tool calls) to console.
+Display streaming LLM output (thinking blocks, tool calls, and token usage) to console.
 """
 
 import logging
@@ -22,15 +22,17 @@ async def mount(coordinator: Any, config: dict[str, Any]) -> None:
     ui_config = config.get("ui", {})
     show_thinking = ui_config.get("show_thinking_stream", True)
     show_tool_lines = ui_config.get("show_tool_lines", 5)
+    show_token_usage = ui_config.get("show_token_usage", True)
 
     # Create hook handlers
-    hooks = StreamingUIHooks(show_thinking, show_tool_lines)
+    hooks = StreamingUIHooks(show_thinking, show_tool_lines, show_token_usage)
 
     # Register hooks on the coordinator
     coordinator.hooks.register("content_block:start", hooks.handle_content_block_start)
     coordinator.hooks.register("content_block:end", hooks.handle_content_block_end)
     coordinator.hooks.register("tool:pre", hooks.handle_tool_pre)
     coordinator.hooks.register("tool:post", hooks.handle_tool_post)
+    coordinator.hooks.register("llm:response", hooks.handle_llm_response)
 
     # Log successful mount
     logger.info("Mounted hooks-streaming-ui")
@@ -41,15 +43,17 @@ async def mount(coordinator: Any, config: dict[str, Any]) -> None:
 class StreamingUIHooks:
     """Hooks for displaying streaming UI output."""
 
-    def __init__(self, show_thinking: bool, show_tool_lines: int):
+    def __init__(self, show_thinking: bool, show_tool_lines: int, show_token_usage: bool):
         """Initialize streaming UI hooks.
 
         Args:
             show_thinking: Whether to display thinking blocks
             show_tool_lines: Number of lines to show for tool I/O
+            show_token_usage: Whether to display token usage
         """
         self.show_thinking = show_thinking
         self.show_tool_lines = show_tool_lines
+        self.show_token_usage = show_token_usage
         self.thinking_blocks: dict[int, dict[str, Any]] = {}
         self.current_agent_context: str | None = None  # Track current sub-agent
 
@@ -243,6 +247,47 @@ class StreamingUIHooks:
             # Parent tool result: status line cyan
             print(f"\033[36m{icon} Tool result: {tool_name}\033[0m")
             print(f"   \033[2m{truncated}\033[0m\n")  # Dim text
+
+        return HookResult(action="continue")
+
+    async def handle_llm_response(self, _event: str, data: dict[str, Any]) -> HookResult:
+        """Display token usage after LLM response.
+
+        Args:
+            _event: Event name (llm:response) - unused
+            data: Event data containing usage information
+
+        Returns:
+            HookResult with action="continue"
+        """
+        # Only display if configured and response was successful
+        if not self.show_token_usage:
+            return HookResult(action="continue")
+
+        status = data.get("status", "ok")
+        if status != "ok":
+            return HookResult(action="continue")
+
+        # Extract usage data
+        event_data = data.get("data", {})
+        usage = event_data.get("usage", {})
+
+        if not usage:
+            return HookResult(action="continue")
+
+        # Get token counts
+        input_tokens = usage.get("input", 0)
+        output_tokens = usage.get("output", 0)
+        total_tokens = input_tokens + output_tokens
+
+        # Format numbers with commas for readability
+        input_str = f"{input_tokens:,}"
+        output_str = f"{output_tokens:,}"
+        total_str = f"{total_tokens:,}"
+
+        # Display token usage with dim styling (not intrusive)
+        print(f"\033[2m┌─ 📊 Token Usage\033[0m")
+        print(f"\033[2m│  Input: {input_str} | Output: {output_str} | Total: {total_str}\033[0m")
 
         return HookResult(action="continue")
 

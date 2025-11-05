@@ -1,10 +1,10 @@
 # Streaming UI Hooks Module
 
-Progressive display for thinking blocks and tool invocations in the Amplifier console.
+Progressive display for thinking blocks, tool invocations, and token usage in the Amplifier console.
 
 ## Purpose
 
-Display streaming LLM output (thinking blocks and tool calls) to console with configurable formatting and truncation.
+Display streaming LLM output (thinking blocks, tool calls, and token usage) to console with configurable formatting and truncation.
 
 ## Contract
 
@@ -15,6 +15,7 @@ Display streaming LLM output (thinking blocks and tool calls) to console with co
 - `content_block:end` events - Display complete thinking blocks
 - `tool:pre` events - Display tool invocations
 - `tool:post` events - Display tool results
+- `llm:response` events - Display token usage statistics
 
 ### Outputs
 
@@ -38,6 +39,7 @@ Configure via `profile.ui` section:
 [ui]
 show_thinking_stream = true  # Display thinking blocks (default: true)
 show_tool_lines = 5          # Max lines to show for tool I/O (default: 5)
+show_token_usage = true      # Display token usage after each turn (default: true)
 ```
 
 ## Features
@@ -45,6 +47,7 @@ show_tool_lines = 5          # Max lines to show for tool I/O (default: 5)
 - **Thinking Block Display**: Shows formatted thinking blocks with clear visual boundaries
 - **Tool Invocation Display**: Shows tool name and truncated arguments
 - **Tool Result Display**: Shows success/failure status with truncated output
+- **Token Usage Display**: Shows input/output/total token counts after each LLM response
 - **Configurable Truncation**: Limit tool I/O display to configured line count
 - **Clean Formatting**: Visual separators and icons for better readability
 
@@ -56,6 +59,7 @@ show_tool_lines = 5          # Max lines to show for tool I/O (default: 5)
 | `content_block:end`   | Receive complete thinking block | Display formatted thinking content  |
 | `tool:pre`            | Tool invocation                 | Display tool name and arguments     |
 | `tool:post`           | Tool result                     | Display success/failure with output |
+| `llm:response`        | LLM response received           | Display token usage statistics      |
 
 ## Display Format
 
@@ -79,6 +83,13 @@ Thinking:
 
 ✅ Tool result: tool_name
    {truncated output}
+```
+
+### Token Usage
+
+```
+┌─ 📊 Token Usage
+│  Input: 1,234 | Output: 567 | Total: 1,801
 ```
 
 ## Philosophy Compliance
