@@ -175,16 +175,16 @@ class StreamingUIHooks:
         Returns:
             HookResult with action="continue"
         """
-        tool_name = data.get("tool", "unknown")
-        arguments = data.get("arguments", {})
+        tool_name = data.get("tool_name", "unknown")
+        tool_input = data.get("tool_input", {})
         session_id = data.get("session_id")
 
         # Detect if this is a sub-agent's tool call
         agent_name = self._parse_agent_from_session_id(session_id)
 
-        # Format arguments for display - ensure it's a string
-        args_str = str(arguments) if arguments is not None else ""
-        truncated = self._truncate_lines(args_str, self.show_tool_lines)
+        # Format tool input for display - ensure it's a string
+        input_str = str(tool_input) if tool_input is not None else ""
+        truncated = self._truncate_lines(input_str, self.show_tool_lines)
 
         if agent_name:
             # Sub-agent tool call: status line cyan, 4-space indent, box drawing
@@ -209,7 +209,7 @@ class StreamingUIHooks:
         Returns:
             HookResult with action="continue"
         """
-        tool_name = data.get("tool", "unknown")
+        tool_name = data.get("tool_name", "unknown")
         result = data.get("result", {})
         session_id = data.get("session_id")
 
