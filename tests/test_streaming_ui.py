@@ -107,7 +107,10 @@ class TestStreamingUIHooks:
         """Test tool invocation display."""
         hooks = StreamingUIHooks(show_thinking=True, show_tool_lines=3, show_token_usage=True)
 
-        data = {"tool": "filesystem_read", "arguments": {"path": "/some/long/path/to/file.txt", "encoding": "utf-8"}}
+        data = {
+            "tool_name": "filesystem_read",
+            "tool_input": {"path": "/some/long/path/to/file.txt", "encoding": "utf-8"},
+        }
 
         result = await hooks.handle_tool_pre("tool:pre", data)
 
@@ -124,7 +127,7 @@ class TestStreamingUIHooks:
         """Test successful tool result display."""
         hooks = StreamingUIHooks(show_thinking=True, show_tool_lines=3, show_token_usage=True)
 
-        data = {"tool": "filesystem_read", "result": {"success": True, "output": "File contents here"}}
+        data = {"tool_name": "filesystem_read", "tool_response": {"success": True, "output": "File contents here"}}
 
         result = await hooks.handle_tool_post("tool:post", data)
 
@@ -140,7 +143,7 @@ class TestStreamingUIHooks:
         """Test failed tool result display."""
         hooks = StreamingUIHooks(show_thinking=True, show_tool_lines=3, show_token_usage=True)
 
-        data = {"tool": "filesystem_read", "result": {"success": False, "output": "Error: File not found"}}
+        data = {"tool_name": "filesystem_read", "tool_response": {"success": False, "output": "Error: File not found"}}
 
         result = await hooks.handle_tool_post("tool:post", data)
 
@@ -281,7 +284,7 @@ async def test_tool_with_string_result(capsys):
     """Test tool result when result is a plain string."""
     hooks = StreamingUIHooks(show_thinking=True, show_tool_lines=5, show_token_usage=True)
 
-    data = {"tool": "some_tool", "result": "Simple string result"}
+    data = {"tool_name": "some_tool", "tool_response": "Simple string result"}
 
     result = await hooks.handle_tool_post("tool:post", data)
 

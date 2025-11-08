@@ -210,7 +210,7 @@ class StreamingUIHooks:
             HookResult with action="continue"
         """
         tool_name = data.get("tool_name", "unknown")
-        result = data.get("result", {})
+        result = data.get("tool_response", data.get("result", {}))
         session_id = data.get("session_id")
 
         # Detect if this is a sub-agent's tool result
