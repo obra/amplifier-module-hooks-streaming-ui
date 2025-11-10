@@ -33,6 +33,7 @@ async def mount(coordinator: Any, config: dict[str, Any]) -> None:
     coordinator.hooks.register("tool:pre", hooks.handle_tool_pre)
     coordinator.hooks.register("tool:post", hooks.handle_tool_post)
     coordinator.hooks.register("llm:response", hooks.handle_llm_response)
+    coordinator.hooks.register("prompt:complete", hooks.handle_prompt_complete)
 
     # Log successful mount
     logger.info("Mounted hooks-streaming-ui")
@@ -56,6 +57,7 @@ class StreamingUIHooks:
         self.show_token_usage = show_token_usage
         self.thinking_blocks: dict[int, dict[str, Any]] = {}
         self.current_agent_context: str | None = None  # Track current sub-agent
+        self.buffered_token_usage: dict[str, Any] | None = None  # Buffer for display after content
 
     def _parse_agent_from_session_id(self, session_id: str | None) -> str | None:
         """Extract agent name from hierarchical session ID.
@@ -251,7 +253,10 @@ class StreamingUIHooks:
         return HookResult(action="continue")
 
     async def handle_llm_response(self, _event: str, data: dict[str, Any]) -> HookResult:
-        """Display token usage after LLM response.
+        """Buffer token usage from LLM response for later display.
+
+        Token usage is buffered here and displayed by handle_prompt_complete()
+        after the response content is shown to the user.
 
         Args:
             _event: Event name (llm:response) - unused
@@ -260,7 +265,7 @@ class StreamingUIHooks:
         Returns:
             HookResult with action="continue"
         """
-        # Only display if configured and response was successful
+        # Only buffer if configured and response was successful
         if not self.show_token_usage:
             return HookResult(action="continue")
 
@@ -275,19 +280,46 @@ class StreamingUIHooks:
         if not usage:
             return HookResult(action="continue")
 
-        # Get token counts
-        input_tokens = usage.get("input", 0)
-        output_tokens = usage.get("output", 0)
-        total_tokens = input_tokens + output_tokens
+        # Buffer token usage for display after content
+        self.buffered_token_usage = {
+            "input": usage.get("input", 0),
+            "output": usage.get("output", 0),
+        }
 
-        # Format numbers with commas for readability
-        input_str = f"{input_tokens:,}"
-        output_str = f"{output_tokens:,}"
-        total_str = f"{total_tokens:,}"
+        return HookResult(action="continue")
 
-        # Display token usage with dim styling (not intrusive)
-        print("\033[2m│  📊 Token Usage\033[0m")
-        print(f"\033[2m└─ Input: {input_str} | Output: {output_str} | Total: {total_str}\033[0m")
+    async def handle_prompt_complete(self, _event: str, data: dict[str, Any]) -> HookResult:
+        """Display buffered token usage after prompt completes.
+
+        Listens for canonical prompt:complete kernel event, which apps
+        emit after displaying response content to user.
+
+        Args:
+            _event: Event name (prompt:complete) - canonical kernel event
+            data: Event data containing prompt and response
+
+        Returns:
+            HookResult with action="continue"
+        """
+
+        # Display buffered token usage if available
+        if self.buffered_token_usage:
+            input_tokens = self.buffered_token_usage["input"]
+            output_tokens = self.buffered_token_usage["output"]
+            total_tokens = input_tokens + output_tokens
+
+            # Format numbers with commas for readability
+            input_str = f"{input_tokens:,}"
+            output_str = f"{output_tokens:,}"
+            total_str = f"{total_tokens:,}"
+
+            # Display token usage with blank line before for visual separation
+            print()  # Blank line before token usage
+            print("\033[2m│  📊 Token Usage\033[0m")
+            print(f"\033[2m└─ Input: {input_str} | Output: {output_str} | Total: {total_str}\033[0m")
+
+            # Clear buffer
+            self.buffered_token_usage = None
 
         return HookResult(action="continue")
 
