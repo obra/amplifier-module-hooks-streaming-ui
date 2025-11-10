@@ -88,8 +88,8 @@ Thinking:
 ### Token Usage
 
 ```
-┌─ 📊 Token Usage
 │  Input: 1,234 | Output: 567 | Total: 1,801
+└─ 📊 Token Usage
 ```
 
 ## Philosophy Compliance

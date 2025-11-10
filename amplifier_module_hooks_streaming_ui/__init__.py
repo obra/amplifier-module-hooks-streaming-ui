@@ -286,8 +286,8 @@ class StreamingUIHooks:
         total_str = f"{total_tokens:,}"
 
         # Display token usage with dim styling (not intrusive)
-        print("\033[2m┌─ 📊 Token Usage\033[0m")
-        print(f"\033[2m│  Input: {input_str} | Output: {output_str} | Total: {total_str}\033[0m")
+        print("\033[2m│  📊 Token Usage\033[0m")
+        print(f"\033[2m└─ Input: {input_str} | Output: {output_str} | Total: {total_str}\033[0m")
 
         return HookResult(action="continue")
 
