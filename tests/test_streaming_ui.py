@@ -40,8 +40,8 @@ async def test_mount_with_defaults():
 
     await mount(coordinator, config)
 
-    # Should still register hooks (now 5 with llm:response)
-    assert coordinator.hooks.register.call_count == 5
+    # Should register 6 hooks: content_block:start, content_block:end, tool:pre, tool:post, llm:response, prompt:complete
+    assert coordinator.hooks.register.call_count == 6
 
 
 class TestStreamingUIHooks:
@@ -156,10 +156,11 @@ class TestStreamingUIHooks:
 
     @pytest.mark.asyncio
     async def test_token_usage_display(self, capsys):
-        """Test token usage display after LLM response."""
+        """Test token usage buffering at llm:response and display at prompt:complete."""
         hooks = StreamingUIHooks(show_thinking=True, show_tool_lines=5, show_token_usage=True)
 
-        data = {
+        # Step 1: llm:response should BUFFER usage, not display
+        llm_data = {
             "status": "ok",
             "data": {
                 "provider": "anthropic",
@@ -168,11 +169,27 @@ class TestStreamingUIHooks:
             },
         }
 
-        result = await hooks.handle_llm_response("llm:response", data)
+        result = await hooks.handle_llm_response("llm:response", llm_data)
 
         assert isinstance(result, HookResult)
         assert result.action == "continue"
 
+        # Should NOT display yet (buffered)
+        captured = capsys.readouterr()
+        assert "📊 Token Usage" not in captured.out, "Should buffer, not display at llm:response"
+
+        # Step 2: prompt:complete should DISPLAY buffered usage
+        prompt_data = {
+            "prompt": "test",
+            "response": "test response",
+        }
+
+        result = await hooks.handle_prompt_complete("prompt:complete", prompt_data)
+
+        assert isinstance(result, HookResult)
+        assert result.action == "continue"
+
+        # NOW should display
         captured = capsys.readouterr()
         assert "📊 Token Usage" in captured.out
         assert "Input: 1,234" in captured.out
