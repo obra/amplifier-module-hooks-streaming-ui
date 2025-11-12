@@ -18,6 +18,8 @@ async def mount(coordinator: Any, config: dict[str, Any]) -> None:
         coordinator: The amplifier coordinator instance
         config: Configuration from profile
     """
+    import sys
+
     # Extract config from ui section
     ui_config = config.get("ui", {})
     show_thinking = ui_config.get("show_thinking_stream", True)
@@ -100,23 +102,27 @@ class StreamingUIHooks:
         Returns:
             HookResult with action="continue"
         """
-        block_data = data.get("data", {})
-        block_type = block_data.get("block_type")
-        block_index = block_data.get("block_index")
+        import sys
+
+        # Access fields directly from data (not nested under data.data)
+        block_type = data.get("block_type")
+        block_index = data.get("block_index")
 
         # Detect sub-agent context for visual distinction
         session_id = data.get("session_id")
         agent_name = self._parse_agent_from_session_id(session_id)
 
         # Only track thinking blocks if configured to show them
-        if block_type == "thinking" and self.show_thinking:
+        if block_type == "thinking" and self.show_thinking and block_index is not None:
             self.thinking_blocks[block_index] = {"started": True, "agent": agent_name}
             if agent_name:
                 # Sub-agent thinking: status line cyan, 4-space indent
-                print(f"\n    \033[36m🤔 [{agent_name}] Thinking...\033[0m")
+                sys.stderr.write(f"\n    \033[36m🤔 [{agent_name}] Thinking...\033[0m\n")
+                sys.stderr.flush()
             else:
                 # Parent thinking: status line cyan
-                print("\n\033[36m🧠 Thinking...\033[0m")
+                sys.stderr.write("\n\033[36m🧠 Thinking...\033[0m\n")
+                sys.stderr.flush()
 
         return HookResult(action="continue")
 
@@ -130,13 +136,13 @@ class StreamingUIHooks:
         Returns:
             HookResult with action="continue"
         """
-        block_data = data.get("data", {})
-        block_index = block_data.get("block_index")
-        block = block_data.get("block", {})
+        # Access fields directly from data (not nested under data.data)
+        block_index = data.get("block_index")
+        block = data.get("block", {})
         block_type = block.get("type")
 
         # Display thinking block if we were tracking it
-        if block_type == "thinking" and block_index in self.thinking_blocks:
+        if block_type == "thinking" and block_index is not None and block_index in self.thinking_blocks:
             # Extract thinking text from block
             thinking_text = block.get("thinking", "") or block.get("text", "")
             agent_name = self.thinking_blocks[block_index].get("agent")
