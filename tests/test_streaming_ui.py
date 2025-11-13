@@ -101,6 +101,32 @@ class TestStreamingUIHooks:
         assert "This is a test thought process." in captured.out
 
     @pytest.mark.asyncio
+    async def test_reasoning_block_end(self, capsys):
+        """Reasoning blocks should be treated like thinking blocks."""
+        hooks = StreamingUIHooks(show_thinking=True, show_tool_lines=5, show_token_usage=True)
+
+        hooks.thinking_blocks[1] = {"started": True}
+        data = {
+            "block_index": 1,
+            "block": {
+                "type": "reasoning",
+                "summary": [{"text": "Summary insight"}],
+                "content": [{"text": "Detailed chain of thought"}],
+            },
+        }
+
+        result = await hooks.handle_content_block_end("content_block:end", data)
+
+        assert isinstance(result, HookResult)
+        assert result.action == "continue"
+        assert 1 not in hooks.thinking_blocks
+
+        captured = capsys.readouterr()
+        assert "Thinking:" in captured.out
+        assert "Summary insight" in captured.out
+        assert "Detailed chain of thought" in captured.out
+
+    @pytest.mark.asyncio
     async def test_tool_pre(self, capsys):
         """Test tool invocation display."""
         hooks = StreamingUIHooks(show_thinking=True, show_tool_lines=3, show_token_usage=True)

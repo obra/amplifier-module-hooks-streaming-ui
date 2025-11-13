@@ -109,7 +109,7 @@ class StreamingUIHooks:
         agent_name = self._parse_agent_from_session_id(session_id)
 
         # Only track thinking blocks if configured to show them
-        if block_type == "thinking" and self.show_thinking and block_index is not None:
+        if block_type in {"thinking", "reasoning"} and self.show_thinking and block_index is not None:
             self.thinking_blocks[block_index] = {"started": True, "agent": agent_name}
             if agent_name:
                 # Sub-agent thinking: status line cyan, 4-space indent
@@ -137,9 +137,9 @@ class StreamingUIHooks:
         block_type = block.get("type")
 
         # Display thinking block if we were tracking it
-        if block_type == "thinking" and block_index is not None and block_index in self.thinking_blocks:
+        if block_type in {"thinking", "reasoning"} and block_index is not None and block_index in self.thinking_blocks:
             # Extract thinking text from block
-            thinking_text = block.get("thinking", "") or block.get("text", "")
+            thinking_text = block.get("thinking", "") or block.get("text", "") or _flatten_reasoning_block(block)
             agent_name = self.thinking_blocks[block_index].get("agent")
 
             if thinking_text:
@@ -358,6 +358,39 @@ class StreamingUIHooks:
         remaining = len(lines) - max_lines
         truncated.append(f"... ({remaining} more lines)")
         return "\n".join(truncated)
+
+
+def _flatten_reasoning_block(block: dict[str, Any]) -> str:
+    """Flatten OpenAI reasoning block structures into plain text."""
+    fragments: list[str] = []
+
+    def _collect(value: Any) -> None:
+        if value is None:
+            return
+        if isinstance(value, str):
+            if value:
+                fragments.append(value)
+            return
+        if isinstance(value, dict):
+            _collect(value.get("text"))
+            _collect(value.get("thinking"))
+            _collect(value.get("summary"))
+            _collect(value.get("content"))
+            return
+        if isinstance(value, list):
+            for item in value:
+                _collect(item)
+            return
+        text_attr = getattr(value, "text", None)
+        if isinstance(text_attr, str) and text_attr:
+            fragments.append(text_attr)
+
+    _collect(block.get("thinking"))
+    _collect(block.get("text"))
+    _collect(block.get("summary"))
+    _collect(block.get("content"))
+
+    return "\n".join(fragment for fragment in fragments if fragment)
 
 
 __all__ = ["mount", "StreamingUIHooks"]
