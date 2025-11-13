@@ -52,7 +52,7 @@ class TestStreamingUIHooks:
         """Test thinking block start detection."""
         hooks = StreamingUIHooks(show_thinking=True, show_tool_lines=5, show_token_usage=True)
 
-        data = {"data": {"block_type": "thinking", "block_index": 0}}
+        data = {"block_type": "thinking", "block_index": 0}
 
         result = await hooks.handle_content_block_start("content_block:start", data)
 
@@ -61,14 +61,14 @@ class TestStreamingUIHooks:
         assert 0 in hooks.thinking_blocks
 
         captured = capsys.readouterr()
-        assert "🧠 Thinking..." in captured.out
+        assert "🧠 Thinking..." in (captured.err or "")
 
     @pytest.mark.asyncio
     async def test_thinking_block_disabled(self, capsys):
         """Test thinking blocks are not shown when disabled."""
         hooks = StreamingUIHooks(show_thinking=False, show_tool_lines=5, show_token_usage=True)
 
-        data = {"data": {"block_type": "thinking", "block_index": 0}}
+        data = {"block_type": "thinking", "block_index": 0}
 
         result = await hooks.handle_content_block_start("content_block:start", data)
 
@@ -87,9 +87,7 @@ class TestStreamingUIHooks:
         # Track the block first
         hooks.thinking_blocks[0] = {"started": True}
 
-        data = {
-            "data": {"block_index": 0, "block": {"type": "thinking", "thinking": "This is a test thought process."}}
-        }
+        data = {"block_index": 0, "block": {"type": "thinking", "thinking": "This is a test thought process."}}
 
         result = await hooks.handle_content_block_end("content_block:end", data)
 
@@ -162,11 +160,9 @@ class TestStreamingUIHooks:
         # Step 1: llm:response should BUFFER usage, not display
         llm_data = {
             "status": "ok",
-            "data": {
-                "provider": "anthropic",
-                "model": "claude-sonnet-4-5",
-                "usage": {"input": 1234, "output": 567},
-            },
+            "provider": "anthropic",
+            "model": "claude-sonnet-4-5",
+            "usage": {"input": 1234, "output": 567},
         }
 
         result = await hooks.handle_llm_response("llm:response", llm_data)
@@ -203,11 +199,9 @@ class TestStreamingUIHooks:
 
         data = {
             "status": "ok",
-            "data": {
-                "provider": "anthropic",
-                "model": "claude-sonnet-4-5",
-                "usage": {"input": 1234, "output": 567},
-            },
+            "provider": "anthropic",
+            "model": "claude-sonnet-4-5",
+            "usage": {"input": 1234, "output": 567},
         }
 
         result = await hooks.handle_llm_response("llm:response", data)
@@ -243,11 +237,9 @@ class TestStreamingUIHooks:
 
         data = {
             "status": "ok",
-            "data": {
-                "provider": "anthropic",
-                "model": "claude-sonnet-4-5",
-                # No usage field
-            },
+            "provider": "anthropic",
+            "model": "claude-sonnet-4-5",
+            # No usage field
         }
 
         result = await hooks.handle_llm_response("llm:response", data)
@@ -288,7 +280,7 @@ async def test_non_thinking_blocks_ignored():
     hooks = StreamingUIHooks(show_thinking=True, show_tool_lines=5, show_token_usage=True)
 
     # Test text block (should be ignored)
-    data = {"data": {"block_type": "text", "block_index": 0}}
+    data = {"block_type": "text", "block_index": 0}
 
     result = await hooks.handle_content_block_start("content_block:start", data)
     assert isinstance(result, HookResult)

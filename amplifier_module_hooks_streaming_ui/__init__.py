@@ -4,6 +4,7 @@ Display streaming LLM output (thinking blocks, tool calls, and token usage) to c
 """
 
 import logging
+import sys
 from typing import Any
 
 from amplifier_core.models import HookResult
@@ -18,8 +19,6 @@ async def mount(coordinator: Any, config: dict[str, Any]) -> None:
         coordinator: The amplifier coordinator instance
         config: Configuration from profile
     """
-    import sys
-
     # Extract config from ui section
     ui_config = config.get("ui", {})
     show_thinking = ui_config.get("show_thinking_stream", True)
@@ -102,9 +101,6 @@ class StreamingUIHooks:
         Returns:
             HookResult with action="continue"
         """
-        import sys
-
-        # Access fields directly from data (not nested under data.data)
         block_type = data.get("block_type")
         block_index = data.get("block_index")
 
@@ -136,7 +132,6 @@ class StreamingUIHooks:
         Returns:
             HookResult with action="continue"
         """
-        # Access fields directly from data (not nested under data.data)
         block_index = data.get("block_index")
         block = data.get("block", {})
         block_type = block.get("type")
@@ -280,8 +275,7 @@ class StreamingUIHooks:
             return HookResult(action="continue")
 
         # Extract usage data
-        event_data = data.get("data", {})
-        usage = event_data.get("usage", {})
+        usage = data.get("usage", {})
 
         if not usage:
             return HookResult(action="continue")
