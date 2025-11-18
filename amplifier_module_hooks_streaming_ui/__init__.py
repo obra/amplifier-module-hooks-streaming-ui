@@ -63,29 +63,24 @@ class StreamingUIHooks:
     def _parse_agent_from_session_id(self, session_id: str | None) -> str | None:
         """Extract agent name from hierarchical session ID.
 
-        Supports two session ID formats:
-        1. W3C Trace Context format (current, since 2025-10):
-           {parent-span}-{child-span}_{agent-name}
-           Example: 0000000000000000-7cc787dd22d54f6c_developer-expertise-zen-architect
-           Uses underscore as separator before agent name
+        Session ID format follows W3C Trace Context principles:
+        {parent-span}-{child-span}_{agent-name}
 
-        2. Legacy UUID format (pre-2025-10, kept for backward compatibility):
-           {uuid-parts}-{agent-name}-{8chars}
-           Example: 12345678-1234-1234-1234-123456789012-zen-architect-abcd1234
-           Uses dashes throughout
+        Examples:
+        - Sub-session: 0000000000000000-7cc787dd22d54f6c_developer-expertise-zen-architect
+        - Parent session: 12345678-1234-1234-1234-123456789012 (no underscore, no agent)
 
         Args:
-            session_id: Session ID (hierarchical if child session, simple if parent)
+            session_id: Session ID with optional agent name after underscore
 
         Returns:
-            Agent name if this is a child session, None if parent session
+            Agent name if child session (contains underscore), None if parent session
         """
         if not session_id:
             return None
 
-        # W3C Trace Context format (current standard)
-        # Format: {parent-span}-{child-span}_{agent-name}
-        # Underscore is the key separator - everything after it is the agent name
+        # W3C Trace Context format: {parent-span}-{child-span}_{agent-name}
+        # Underscore separator marks the boundary before agent name
         if "_" in session_id:
             parts = session_id.split("_", 1)  # Split on first underscore only
             if len(parts) == 2:
@@ -93,23 +88,7 @@ class StreamingUIHooks:
                 # Handles namespaced agents like "developer-expertise-zen-architect"
                 return parts[1]
 
-        # Legacy UUID format (backward compatibility)
-        # Format: {uuid-parts}-{agent-name}-{8chars}
-        # All dashes, requires parsing to extract agent from middle
-        parts = session_id.split("-")
-
-        # Check if last part is 8-char ID
-        if len(parts) < 3 or len(parts[-1]) != 8 or not parts[-1].isalnum():
-            return None  # Not legacy format
-
-        # Parent UUID is first 5 dash-separated segments (standard UUID format)
-        # Everything after that until the 8-char ID is the agent name
-        # Example: uuid-uuid-uuid-uuid-uuid-bug-hunter-12345678
-        if len(parts) >= 7:  # At least 5 UUID parts + agent + short ID
-            # Agent name is everything after the 5th dash and before short ID
-            agent_parts = parts[5:-1]  # Skip first 5 (UUID) and last 1 (short ID)
-            return "-".join(agent_parts) if agent_parts else None
-
+        # No underscore = parent session (no agent name)
         return None
 
     async def handle_content_block_start(self, _event: str, data: dict[str, Any]) -> HookResult:
