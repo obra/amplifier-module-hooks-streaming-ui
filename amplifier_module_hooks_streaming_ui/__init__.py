@@ -63,8 +63,19 @@ class StreamingUIHooks:
     def _parse_agent_from_session_id(self, session_id: str | None) -> str | None:
         """Extract agent name from hierarchical session ID.
 
+        Supports two session ID formats:
+        1. W3C Trace Context format (current, since 2025-10):
+           {parent-span}-{child-span}_{agent-name}
+           Example: 0000000000000000-7cc787dd22d54f6c_developer-expertise-zen-architect
+           Uses underscore as separator before agent name
+
+        2. Legacy UUID format (pre-2025-10, kept for backward compatibility):
+           {uuid-parts}-{agent-name}-{8chars}
+           Example: 12345678-1234-1234-1234-123456789012-zen-architect-abcd1234
+           Uses dashes throughout
+
         Args:
-            session_id: Session ID (may be hierarchical like 'parent-uuid-agent-name-8chars')
+            session_id: Session ID (hierarchical if child session, simple if parent)
 
         Returns:
             Agent name if this is a child session, None if parent session
@@ -72,14 +83,24 @@ class StreamingUIHooks:
         if not session_id:
             return None
 
-        # Hierarchical pattern: {parent-uuid}-{agent-name}-{8char}
-        # Agent name can contain dashes (bug-hunter, zen-architect)
-        # Strategy: Find last 8-char segment, then extract everything between last - before it
+        # W3C Trace Context format (current standard)
+        # Format: {parent-span}-{child-span}_{agent-name}
+        # Underscore is the key separator - everything after it is the agent name
+        if "_" in session_id:
+            parts = session_id.split("_", 1)  # Split on first underscore only
+            if len(parts) == 2:
+                # Everything after underscore is agent name
+                # Handles namespaced agents like "developer-expertise-zen-architect"
+                return parts[1]
+
+        # Legacy UUID format (backward compatibility)
+        # Format: {uuid-parts}-{agent-name}-{8chars}
+        # All dashes, requires parsing to extract agent from middle
         parts = session_id.split("-")
 
         # Check if last part is 8-char ID
         if len(parts) < 3 or len(parts[-1]) != 8 or not parts[-1].isalnum():
-            return None
+            return None  # Not legacy format
 
         # Parent UUID is first 5 dash-separated segments (standard UUID format)
         # Everything after that until the 8-char ID is the agent name
