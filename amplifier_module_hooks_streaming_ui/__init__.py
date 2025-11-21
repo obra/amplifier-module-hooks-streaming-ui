@@ -8,8 +8,31 @@ import sys
 from typing import Any
 
 from amplifier_core.models import HookResult
+from rich.console import Console
+from rich.markdown import Markdown
+from rich.theme import Theme
 
 logger = logging.getLogger(__name__)
+
+# Create console with muted theme for thinking blocks
+_muted_theme = Theme(
+    {
+        "markdown.h1": "dim italic underline",
+        "markdown.h2": "dim bold",
+        "markdown.h3": "dim bold",
+        "markdown.h4": "dim",
+        "markdown.h5": "dim",
+        "markdown.h6": "dim",
+        "markdown.text": "dim",
+        "markdown.code": "dim",
+        "markdown.code_block": "dim",
+        "markdown.link": "dim underline",
+        "markdown.bold": "dim bold",
+        "markdown.italic": "dim italic",
+        "markdown.item.bullet": "dim",
+    }
+)
+_muted_console = Console(theme=_muted_theme, file=sys.stdout, highlight=False)
 
 
 async def mount(coordinator: Any, config: dict[str, Any]) -> None:
@@ -145,20 +168,33 @@ class StreamingUIHooks:
             if thinking_text:
                 # Display formatted thinking block with agent context
                 if agent_name:
-                    # Sub-agent thinking: dark gray, 4-space indent, simple format (no box - was truncating)
+                    # Sub-agent thinking: dark gray, 4-space indent, markdown rendered
                     print(f"\n    \033[90m{'=' * 56}\033[0m")
                     print(f"    \033[90m[{agent_name}] Thinking:\033[0m")
                     print(f"    \033[90m{'-' * 56}\033[0m")
-                    # Indent each line with dark gray (no truncation)
-                    for line in thinking_text.split("\n"):
-                        print(f"    \033[90m{line}\033[0m")
+                    # Render markdown with muted theme, indent each line
+                    from io import StringIO
+
+                    buffer = StringIO()
+                    temp_console = Console(theme=_muted_theme, file=buffer, highlight=False, width=52)
+                    temp_console.print(Markdown(thinking_text))
+                    rendered = buffer.getvalue()
+                    for line in rendered.rstrip().split("\n"):
+                        print(f"    {line}")
                     print(f"    \033[90m{'=' * 56}\033[0m\n")
                 else:
-                    # Parent thinking: dark gray (Proposal C)
+                    # Parent thinking: markdown rendered with muted theme (same as sub-agent)
+                    from io import StringIO
+
+                    buffer = StringIO()
+                    temp_console = Console(theme=_muted_theme, file=buffer, highlight=False, width=60)
+                    temp_console.print(Markdown(thinking_text))
+                    rendered = buffer.getvalue()
+
                     print(f"\n\033[90m{'=' * 60}\033[0m")
                     print("\033[90mThinking:\033[0m")
                     print(f"\033[90m{'-' * 60}\033[0m")
-                    print(f"\033[90m{thinking_text}\033[0m")
+                    print(rendered.rstrip())  # Print the muted markdown
                     print(f"\033[90m{'=' * 60}\033[0m\n")
 
             # Clean up tracking
