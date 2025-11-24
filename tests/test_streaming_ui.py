@@ -20,7 +20,7 @@ async def test_mount_registers_hooks():
     await mount(coordinator, config)
 
     # Verify all hooks are registered
-    expected_events = ["content_block:start", "content_block:end", "tool:pre", "tool:post", "llm:response"]
+    expected_events = ["content_block:start", "content_block:end", "tool:pre", "tool:post"]
 
     for event in expected_events:
         # Find if this event was registered
@@ -40,8 +40,8 @@ async def test_mount_with_defaults():
 
     await mount(coordinator, config)
 
-    # Should register 6 hooks: content_block:start, content_block:end, tool:pre, tool:post, llm:response, prompt:complete
-    assert coordinator.hooks.register.call_count == 6
+    # Should register 4 hooks: content_block:start, content_block:end, tool:pre, tool:post
+    assert coordinator.hooks.register.call_count == 4
 
 
 class TestStreamingUIHooks:
@@ -179,39 +179,25 @@ class TestStreamingUIHooks:
         assert "Error: File not found" in captured.out
 
     @pytest.mark.asyncio
-    async def test_token_usage_display(self, capsys):
-        """Test token usage buffering at llm:response and display at prompt:complete."""
+    async def test_token_usage_display_with_thinking(self, capsys):
+        """Test token usage displayed after thinking block when included in event data."""
         hooks = StreamingUIHooks(show_thinking=True, show_tool_lines=5, show_token_usage=True)
 
-        # Step 1: llm:response should BUFFER usage, not display
-        llm_data = {
-            "status": "ok",
-            "provider": "anthropic",
-            "model": "claude-sonnet-4-5",
-            "usage": {"input": 1234, "output": 567},
+        # Track the thinking block first
+        hooks.thinking_blocks[0] = {"started": True}
+
+        # content_block:end now includes usage from parent response
+        data = {
+            "block_index": 0,
+            "block": {"type": "thinking", "thinking": "Test thinking"},
+            "usage": {"input_tokens": 1234, "output_tokens": 567, "total_tokens": 1801},
         }
 
-        result = await hooks.handle_llm_response("llm:response", llm_data)
+        result = await hooks.handle_content_block_end("content_block:end", data)
 
         assert isinstance(result, HookResult)
         assert result.action == "continue"
 
-        # Should NOT display yet (buffered)
-        captured = capsys.readouterr()
-        assert "📊 Token Usage" not in captured.out, "Should buffer, not display at llm:response"
-
-        # Step 2: prompt:complete should DISPLAY buffered usage
-        prompt_data = {
-            "prompt": "test",
-            "response": "test response",
-        }
-
-        result = await hooks.handle_prompt_complete("prompt:complete", prompt_data)
-
-        assert isinstance(result, HookResult)
-        assert result.action == "continue"
-
-        # NOW should display
         captured = capsys.readouterr()
         assert "📊 Token Usage" in captured.out
         assert "Input: 1,234" in captured.out
@@ -223,14 +209,15 @@ class TestStreamingUIHooks:
         """Test token usage is not shown when disabled."""
         hooks = StreamingUIHooks(show_thinking=True, show_tool_lines=5, show_token_usage=False)
 
+        hooks.thinking_blocks[0] = {"started": True}
+
         data = {
-            "status": "ok",
-            "provider": "anthropic",
-            "model": "claude-sonnet-4-5",
-            "usage": {"input": 1234, "output": 567},
+            "block_index": 0,
+            "block": {"type": "thinking", "thinking": "Test"},
+            "usage": {"input_tokens": 1234, "output_tokens": 567, "total_tokens": 1801},
         }
 
-        result = await hooks.handle_llm_response("llm:response", data)
+        result = await hooks.handle_content_block_end("content_block:end", data)
 
         assert isinstance(result, HookResult)
         assert result.action == "continue"
@@ -239,36 +226,16 @@ class TestStreamingUIHooks:
         assert "Token Usage" not in captured.out
 
     @pytest.mark.asyncio
-    async def test_token_usage_on_error(self, capsys):
-        """Test token usage is not shown on error responses."""
-        hooks = StreamingUIHooks(show_thinking=True, show_tool_lines=5, show_token_usage=True)
-
-        data = {
-            "status": "error",
-            "error": "API timeout",
-        }
-
-        result = await hooks.handle_llm_response("llm:response", data)
-
-        assert isinstance(result, HookResult)
-        assert result.action == "continue"
-
-        captured = capsys.readouterr()
-        assert "Token Usage" not in captured.out
-
-    @pytest.mark.asyncio
-    async def test_token_usage_missing_data(self, capsys):
+    async def test_token_usage_missing_from_event(self, capsys):
         """Test token usage handles missing usage data gracefully."""
         hooks = StreamingUIHooks(show_thinking=True, show_tool_lines=5, show_token_usage=True)
 
-        data = {
-            "status": "ok",
-            "provider": "anthropic",
-            "model": "claude-sonnet-4-5",
-            # No usage field
-        }
+        hooks.thinking_blocks[0] = {"started": True}
 
-        result = await hooks.handle_llm_response("llm:response", data)
+        # No usage field in event data
+        data = {"block_index": 0, "block": {"type": "thinking", "thinking": "Test"}}
+
+        result = await hooks.handle_content_block_end("content_block:end", data)
 
         assert isinstance(result, HookResult)
         assert result.action == "continue"

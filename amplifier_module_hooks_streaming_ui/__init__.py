@@ -35,8 +35,6 @@ async def mount(coordinator: Any, config: dict[str, Any]) -> None:
     coordinator.hooks.register("content_block:end", hooks.handle_content_block_end)
     coordinator.hooks.register("tool:pre", hooks.handle_tool_pre)
     coordinator.hooks.register("tool:post", hooks.handle_tool_post)
-    coordinator.hooks.register("llm:response", hooks.handle_llm_response)
-    coordinator.hooks.register("prompt:complete", hooks.handle_prompt_complete)
 
     # Log successful mount
     logger.info("Mounted hooks-streaming-ui")
@@ -59,8 +57,6 @@ class StreamingUIHooks:
         self.show_tool_lines = show_tool_lines
         self.show_token_usage = show_token_usage
         self.thinking_blocks: dict[int, dict[str, Any]] = {}
-        self.current_agent_context: str | None = None  # Track current sub-agent
-        self.token_buffers: dict[str, dict[str, int]] = {}  # Buffer tokens per context
 
     def _parse_agent_from_session_id(self, session_id: str | None) -> str | None:
         """Extract agent name from hierarchical session ID.
@@ -125,11 +121,11 @@ class StreamingUIHooks:
         return HookResult(action="continue")
 
     async def handle_content_block_end(self, _event: str, data: dict[str, Any]) -> HookResult:
-        """Display complete thinking block.
+        """Display complete thinking block and token usage.
 
         Args:
             _event: Event name (content_block:end) - unused
-            data: Event data containing complete block
+            data: Event data containing complete block and usage
 
         Returns:
             HookResult with action="continue"
@@ -137,6 +133,7 @@ class StreamingUIHooks:
         block_index = data.get("block_index")
         block = data.get("block", {})
         block_type = block.get("type")
+        usage = data.get("usage")  # Usage from parent response
 
         # Display thinking block if we were tracking it
         if block_type in {"thinking", "reasoning"} and block_index is not None and block_index in self.thinking_blocks:
@@ -178,6 +175,21 @@ class StreamingUIHooks:
                     print(f"\033[2m{rendered.rstrip()}\033[0m")
                     print(f"\033[90m{'=' * 60}\033[0m\n")
 
+                # Display token usage after thinking block (if present and configured)
+                if self.show_token_usage and usage:
+                    indent = "    " if agent_name else ""
+                    input_tokens = usage.get("input_tokens", 0)
+                    output_tokens = usage.get("output_tokens", 0)
+                    total_tokens = input_tokens + output_tokens
+
+                    input_str = f"{input_tokens:,}"
+                    output_str = f"{output_tokens:,}"
+                    total_str = f"{total_tokens:,}"
+
+                    print()
+                    print(f"{indent}\033[2m│  📊 Token Usage\033[0m")
+                    print(f"{indent}\033[2m└─ Input: {input_str} | Output: {output_str} | Total: {total_str}\033[0m")
+
             # Clean up tracking
             del self.thinking_blocks[block_index]
 
@@ -218,10 +230,9 @@ class StreamingUIHooks:
         return HookResult(action="continue")
 
     async def handle_tool_post(self, _event: str, data: dict[str, Any]) -> HookResult:
-        """Display tool result with truncated output and token usage.
+        """Display tool result with truncated output.
 
         Shows sub-agent tool results with indentation and agent name for clarity.
-        If this is a task tool (sub-agent), displays buffered token usage.
 
         Args:
             _event: Event name (tool:post) - unused
@@ -269,99 +280,7 @@ class StreamingUIHooks:
             print(f"\033[36m{icon} Tool result: {tool_name}\033[0m")
             print(f"   \033[2m{truncated}\033[0m\n")  # Dim text
 
-        # Display buffered token usage for task tools (sub-agents)
-        if tool_name == "task" and agent_name and agent_name in self.token_buffers:
-            self._display_token_usage(self.token_buffers[agent_name], indent="    ")
-            del self.token_buffers[agent_name]  # Clear buffer after display
-
         return HookResult(action="continue")
-
-    async def handle_llm_response(self, _event: str, data: dict[str, Any]) -> HookResult:
-        """Buffer token usage from LLM response for context-aware display.
-
-        Buffers token usage per context (main orchestrator or sub-agent).
-        Tokens are displayed:
-        - For sub-agents: After their tool result (in handle_tool_post)
-        - For main orchestrator: At prompt completion (in handle_prompt_complete)
-
-        Args:
-            _event: Event name (llm:response) - unused
-            data: Event data containing usage information
-
-        Returns:
-            HookResult with action="continue"
-        """
-        # Only buffer if configured and response was successful
-        if not self.show_token_usage:
-            return HookResult(action="continue")
-
-        status = data.get("status", "ok")
-        if status != "ok":
-            return HookResult(action="continue")
-
-        # Extract usage data
-        usage = data.get("usage", {})
-
-        if not usage:
-            return HookResult(action="continue")
-
-        # Extract token counts
-        input_tokens = usage.get("input", 0)
-        output_tokens = usage.get("output", 0)
-
-        # Determine context (main orchestrator or sub-agent)
-        session_id = data.get("session_id")
-        agent_name = self._parse_agent_from_session_id(session_id)
-        context_key = agent_name if agent_name else "main"
-
-        # Buffer tokens for this context
-        self.token_buffers[context_key] = {
-            "input": input_tokens,
-            "output": output_tokens,
-        }
-
-        return HookResult(action="continue")
-
-    async def handle_prompt_complete(self, _event: str, data: dict[str, Any]) -> HookResult:
-        """Display main orchestrator token usage after prompt completes.
-
-        Displays buffered token usage for the main orchestrator context.
-        Sub-agent tokens are displayed in handle_tool_post after their results.
-
-        Args:
-            _event: Event name (prompt:complete) - canonical kernel event
-            data: Event data containing prompt and response
-
-        Returns:
-            HookResult with action="continue"
-        """
-        # Display main orchestrator token usage if available
-        if "main" in self.token_buffers:
-            self._display_token_usage(self.token_buffers["main"], indent="")
-            del self.token_buffers["main"]  # Clear buffer after display
-
-        return HookResult(action="continue")
-
-    def _display_token_usage(self, usage: dict[str, int], indent: str = "") -> None:
-        """Display token usage with optional indentation.
-
-        Args:
-            usage: Dictionary with 'input' and 'output' token counts
-            indent: String to prepend to each line (for sub-agent indentation)
-        """
-        input_tokens = usage["input"]
-        output_tokens = usage["output"]
-        total_tokens = input_tokens + output_tokens
-
-        # Format numbers with commas for readability
-        input_str = f"{input_tokens:,}"
-        output_str = f"{output_tokens:,}"
-        total_str = f"{total_tokens:,}"
-
-        # Display with optional indentation
-        print()  # Blank line before token usage
-        print(f"{indent}\033[2m│  📊 Token Usage\033[0m")
-        print(f"{indent}\033[2m└─ Input: {input_str} | Output: {output_str} | Total: {total_str}\033[0m")
 
     def _truncate_lines(self, text: str, max_lines: int) -> str:
         """Truncate text to max_lines with ellipsis.
