@@ -60,7 +60,6 @@ class StreamingUIHooks:
         self.show_token_usage = show_token_usage
         self.thinking_blocks: dict[int, dict[str, Any]] = {}
         self.current_agent_context: str | None = None  # Track current sub-agent
-        self.buffered_token_usage: dict[str, Any] | None = None  # Buffer for display after content
 
     def _parse_agent_from_session_id(self, session_id: str | None) -> str | None:
         """Extract agent name from hierarchical session ID.
@@ -271,10 +270,12 @@ class StreamingUIHooks:
         return HookResult(action="continue")
 
     async def handle_llm_response(self, _event: str, data: dict[str, Any]) -> HookResult:
-        """Buffer token usage from LLM response for later display.
+        """Display token usage immediately after each LLM response.
 
-        Token usage is buffered here and displayed by handle_prompt_complete()
-        after the response content is shown to the user.
+        This displays token usage after EVERY LLM response, including:
+        - Main orchestrator responses
+        - Tool calls (e.g., zen-architect, other agents)
+        - Any provider response
 
         Args:
             _event: Event name (llm:response) - unused
@@ -283,7 +284,7 @@ class StreamingUIHooks:
         Returns:
             HookResult with action="continue"
         """
-        # Only buffer if configured and response was successful
+        # Only display if configured and response was successful
         if not self.show_token_usage:
             return HookResult(action="continue")
 
@@ -297,19 +298,29 @@ class StreamingUIHooks:
         if not usage:
             return HookResult(action="continue")
 
-        # Buffer token usage for display after content
-        self.buffered_token_usage = {
-            "input": usage.get("input", 0),
-            "output": usage.get("output", 0),
-        }
+        # Extract token counts
+        input_tokens = usage.get("input", 0)
+        output_tokens = usage.get("output", 0)
+        total_tokens = input_tokens + output_tokens
+
+        # Format numbers with commas for readability
+        input_str = f"{input_tokens:,}"
+        output_str = f"{output_tokens:,}"
+        total_str = f"{total_tokens:,}"
+
+        # Display token usage immediately
+        print()  # Blank line before token usage
+        print("\033[2m│  📊 Token Usage\033[0m")
+        print(f"\033[2m└─ Input: {input_str} | Output: {output_str} | Total: {total_str}\033[0m")
 
         return HookResult(action="continue")
 
     async def handle_prompt_complete(self, _event: str, data: dict[str, Any]) -> HookResult:
-        """Display buffered token usage after prompt completes.
+        """Handle prompt completion event (no-op for token display).
 
-        Listens for canonical prompt:complete kernel event, which apps
-        emit after displaying response content to user.
+        Token usage is now displayed immediately after each LLM response
+        via handle_llm_response(). This handler remains for backward
+        compatibility but no longer displays tokens.
 
         Args:
             _event: Event name (prompt:complete) - canonical kernel event
@@ -318,26 +329,7 @@ class StreamingUIHooks:
         Returns:
             HookResult with action="continue"
         """
-
-        # Display buffered token usage if available
-        if self.buffered_token_usage:
-            input_tokens = self.buffered_token_usage["input"]
-            output_tokens = self.buffered_token_usage["output"]
-            total_tokens = input_tokens + output_tokens
-
-            # Format numbers with commas for readability
-            input_str = f"{input_tokens:,}"
-            output_str = f"{output_tokens:,}"
-            total_str = f"{total_tokens:,}"
-
-            # Display token usage with blank line before for visual separation
-            print()  # Blank line before token usage
-            print("\033[2m│  📊 Token Usage\033[0m")
-            print(f"\033[2m└─ Input: {input_str} | Output: {output_str} | Total: {total_str}\033[0m")
-
-            # Clear buffer
-            self.buffered_token_usage = None
-
+        # Token display moved to handle_llm_response() for immediate feedback
         return HookResult(action="continue")
 
     def _truncate_lines(self, text: str, max_lines: int) -> str:
