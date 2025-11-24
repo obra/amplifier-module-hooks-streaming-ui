@@ -60,6 +60,7 @@ class StreamingUIHooks:
         self.show_token_usage = show_token_usage
         self.thinking_blocks: dict[int, dict[str, Any]] = {}
         self.current_agent_context: str | None = None  # Track current sub-agent
+        self.token_buffers: dict[str, dict[str, int]] = {}  # Buffer tokens per context
 
     def _parse_agent_from_session_id(self, session_id: str | None) -> str | None:
         """Extract agent name from hierarchical session ID.
@@ -217,9 +218,10 @@ class StreamingUIHooks:
         return HookResult(action="continue")
 
     async def handle_tool_post(self, _event: str, data: dict[str, Any]) -> HookResult:
-        """Display tool result with truncated output.
+        """Display tool result with truncated output and token usage.
 
         Shows sub-agent tool results with indentation and agent name for clarity.
+        If this is a task tool (sub-agent), displays buffered token usage.
 
         Args:
             _event: Event name (tool:post) - unused
@@ -267,15 +269,20 @@ class StreamingUIHooks:
             print(f"\033[36m{icon} Tool result: {tool_name}\033[0m")
             print(f"   \033[2m{truncated}\033[0m\n")  # Dim text
 
+        # Display buffered token usage for task tools (sub-agents)
+        if tool_name == "task" and agent_name and agent_name in self.token_buffers:
+            self._display_token_usage(self.token_buffers[agent_name], indent="    ")
+            del self.token_buffers[agent_name]  # Clear buffer after display
+
         return HookResult(action="continue")
 
     async def handle_llm_response(self, _event: str, data: dict[str, Any]) -> HookResult:
-        """Display token usage immediately after each LLM response.
+        """Buffer token usage from LLM response for context-aware display.
 
-        This displays token usage after EVERY LLM response, including:
-        - Main orchestrator responses
-        - Tool calls (e.g., zen-architect, other agents)
-        - Any provider response
+        Buffers token usage per context (main orchestrator or sub-agent).
+        Tokens are displayed:
+        - For sub-agents: After their tool result (in handle_tool_post)
+        - For main orchestrator: At prompt completion (in handle_prompt_complete)
 
         Args:
             _event: Event name (llm:response) - unused
@@ -284,7 +291,7 @@ class StreamingUIHooks:
         Returns:
             HookResult with action="continue"
         """
-        # Only display if configured and response was successful
+        # Only buffer if configured and response was successful
         if not self.show_token_usage:
             return HookResult(action="continue")
 
@@ -301,26 +308,25 @@ class StreamingUIHooks:
         # Extract token counts
         input_tokens = usage.get("input", 0)
         output_tokens = usage.get("output", 0)
-        total_tokens = input_tokens + output_tokens
 
-        # Format numbers with commas for readability
-        input_str = f"{input_tokens:,}"
-        output_str = f"{output_tokens:,}"
-        total_str = f"{total_tokens:,}"
+        # Determine context (main orchestrator or sub-agent)
+        session_id = data.get("session_id")
+        agent_name = self._parse_agent_from_session_id(session_id)
+        context_key = agent_name if agent_name else "main"
 
-        # Display token usage immediately
-        print()  # Blank line before token usage
-        print("\033[2m│  📊 Token Usage\033[0m")
-        print(f"\033[2m└─ Input: {input_str} | Output: {output_str} | Total: {total_str}\033[0m")
+        # Buffer tokens for this context
+        self.token_buffers[context_key] = {
+            "input": input_tokens,
+            "output": output_tokens,
+        }
 
         return HookResult(action="continue")
 
     async def handle_prompt_complete(self, _event: str, data: dict[str, Any]) -> HookResult:
-        """Handle prompt completion event (no-op for token display).
+        """Display main orchestrator token usage after prompt completes.
 
-        Token usage is now displayed immediately after each LLM response
-        via handle_llm_response(). This handler remains for backward
-        compatibility but no longer displays tokens.
+        Displays buffered token usage for the main orchestrator context.
+        Sub-agent tokens are displayed in handle_tool_post after their results.
 
         Args:
             _event: Event name (prompt:complete) - canonical kernel event
@@ -329,8 +335,33 @@ class StreamingUIHooks:
         Returns:
             HookResult with action="continue"
         """
-        # Token display moved to handle_llm_response() for immediate feedback
+        # Display main orchestrator token usage if available
+        if "main" in self.token_buffers:
+            self._display_token_usage(self.token_buffers["main"], indent="")
+            del self.token_buffers["main"]  # Clear buffer after display
+
         return HookResult(action="continue")
+
+    def _display_token_usage(self, usage: dict[str, int], indent: str = "") -> None:
+        """Display token usage with optional indentation.
+
+        Args:
+            usage: Dictionary with 'input' and 'output' token counts
+            indent: String to prepend to each line (for sub-agent indentation)
+        """
+        input_tokens = usage["input"]
+        output_tokens = usage["output"]
+        total_tokens = input_tokens + output_tokens
+
+        # Format numbers with commas for readability
+        input_str = f"{input_tokens:,}"
+        output_str = f"{output_tokens:,}"
+        total_str = f"{total_tokens:,}"
+
+        # Display with optional indentation
+        print()  # Blank line before token usage
+        print(f"{indent}\033[2m│  📊 Token Usage\033[0m")
+        print(f"{indent}\033[2m└─ Input: {input_str} | Output: {output_str} | Total: {total_str}\033[0m")
 
     def _truncate_lines(self, text: str, max_lines: int) -> str:
         """Truncate text to max_lines with ellipsis.
