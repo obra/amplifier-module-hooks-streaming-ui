@@ -180,15 +180,17 @@ class TestStreamingUIHooks:
 
     @pytest.mark.asyncio
     async def test_token_usage_display_with_thinking(self, capsys):
-        """Test token usage displayed after thinking block when included in event data."""
+        """Test token usage displayed after last block when included in event data."""
         hooks = StreamingUIHooks(show_thinking=True, show_tool_lines=5, show_token_usage=True)
 
         # Track the thinking block first
         hooks.thinking_blocks[0] = {"started": True}
 
-        # content_block:end now includes usage from parent response
+        # content_block:end now includes usage from parent response and total_blocks
+        # This is the last (and only) block
         data = {
             "block_index": 0,
+            "total_blocks": 1,
             "block": {"type": "thinking", "thinking": "Test thinking"},
             "usage": {"input_tokens": 1234, "output_tokens": 567, "total_tokens": 1801},
         }
@@ -205,6 +207,29 @@ class TestStreamingUIHooks:
         assert "Total: 1,801" in captured.out
 
     @pytest.mark.asyncio
+    async def test_token_usage_not_displayed_for_non_last_block(self, capsys):
+        """Test token usage NOT displayed for blocks that aren't last."""
+        hooks = StreamingUIHooks(show_thinking=True, show_tool_lines=5, show_token_usage=True)
+
+        hooks.thinking_blocks[0] = {"started": True}
+
+        # This is block 0 of 2 (not last)
+        data = {
+            "block_index": 0,
+            "total_blocks": 2,
+            "block": {"type": "thinking", "thinking": "Test"},
+            "usage": {"input_tokens": 1234, "output_tokens": 567, "total_tokens": 1801},
+        }
+
+        result = await hooks.handle_content_block_end("content_block:end", data)
+
+        assert isinstance(result, HookResult)
+        assert result.action == "continue"
+
+        captured = capsys.readouterr()
+        assert "Token Usage" not in captured.out  # Should NOT display
+
+    @pytest.mark.asyncio
     async def test_token_usage_disabled(self, capsys):
         """Test token usage is not shown when disabled."""
         hooks = StreamingUIHooks(show_thinking=True, show_tool_lines=5, show_token_usage=False)
@@ -213,6 +238,7 @@ class TestStreamingUIHooks:
 
         data = {
             "block_index": 0,
+            "total_blocks": 1,
             "block": {"type": "thinking", "thinking": "Test"},
             "usage": {"input_tokens": 1234, "output_tokens": 567, "total_tokens": 1801},
         }
@@ -232,8 +258,12 @@ class TestStreamingUIHooks:
 
         hooks.thinking_blocks[0] = {"started": True}
 
-        # No usage field in event data
-        data = {"block_index": 0, "block": {"type": "thinking", "thinking": "Test"}}
+        # No usage field in event data (but is last block)
+        data = {
+            "block_index": 0,
+            "total_blocks": 1,
+            "block": {"type": "thinking", "thinking": "Test"},
+        }
 
         result = await hooks.handle_content_block_end("content_block:end", data)
 

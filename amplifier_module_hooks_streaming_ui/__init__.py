@@ -125,21 +125,27 @@ class StreamingUIHooks:
 
         Args:
             _event: Event name (content_block:end) - unused
-            data: Event data containing complete block and usage
+            data: Event data containing complete block, usage, and total count
 
         Returns:
             HookResult with action="continue"
         """
         block_index = data.get("block_index")
+        total_blocks = data.get("total_blocks")
         block = data.get("block", {})
         block_type = block.get("type")
         usage = data.get("usage")  # Usage from parent response
+        is_last_block = block_index == total_blocks - 1 if total_blocks else False
+
+        # Get agent name for indentation (before we delete from tracking)
+        agent_name = None
+        if block_index in self.thinking_blocks:
+            agent_name = self.thinking_blocks[block_index].get("agent")
 
         # Display thinking block if we were tracking it
         if block_type in {"thinking", "reasoning"} and block_index is not None and block_index in self.thinking_blocks:
             # Extract thinking text from block
             thinking_text = block.get("thinking", "") or block.get("text", "") or _flatten_reasoning_block(block)
-            agent_name = self.thinking_blocks[block_index].get("agent")
 
             if thinking_text:
                 # Display formatted thinking block with agent context
@@ -175,23 +181,25 @@ class StreamingUIHooks:
                     print(f"\033[2m{rendered.rstrip()}\033[0m")
                     print(f"\033[90m{'=' * 60}\033[0m\n")
 
-                # Display token usage after thinking block (if present and configured)
-                if self.show_token_usage and usage:
-                    indent = "    " if agent_name else ""
-                    input_tokens = usage.get("input_tokens", 0)
-                    output_tokens = usage.get("output_tokens", 0)
-                    total_tokens = input_tokens + output_tokens
-
-                    input_str = f"{input_tokens:,}"
-                    output_str = f"{output_tokens:,}"
-                    total_str = f"{total_tokens:,}"
-
-                    print()
-                    print(f"{indent}\033[2m│  📊 Token Usage\033[0m")
-                    print(f"{indent}\033[2m└─ Input: {input_str} | Output: {output_str} | Total: {total_str}\033[0m")
-
             # Clean up tracking
             del self.thinking_blocks[block_index]
+
+        # Display token usage after last block (if present and configured)
+        if is_last_block and self.show_token_usage and usage:
+            # Use agent name determined earlier for indentation
+            indent = "    " if agent_name else ""
+
+            input_tokens = usage.get("input_tokens", 0)
+            output_tokens = usage.get("output_tokens", 0)
+            total_tokens = input_tokens + output_tokens
+
+            input_str = f"{input_tokens:,}"
+            output_str = f"{output_tokens:,}"
+            total_str = f"{total_tokens:,}"
+
+            print()
+            print(f"{indent}\033[2m│  📊 Token Usage\033[0m")
+            print(f"{indent}\033[2m└─ Input: {input_str} | Output: {output_str} | Total: {total_str}\033[0m")
 
         return HookResult(action="continue")
 
