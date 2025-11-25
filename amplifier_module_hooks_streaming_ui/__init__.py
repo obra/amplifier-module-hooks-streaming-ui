@@ -197,7 +197,6 @@ class StreamingUIHooks:
             output_str = f"{output_tokens:,}"
             total_str = f"{total_tokens:,}"
 
-            print()
             print(f"{indent}\033[2m│  📊 Token Usage\033[0m")
             print(f"{indent}\033[2m└─ Input: {input_str} | Output: {output_str} | Total: {total_str}\033[0m")
 
