@@ -5,6 +5,7 @@ description = "Streaming UI display hooks for Amplifier - displays thinking bloc
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "rich>=13.0.0",
 ]
 
 [project.entry-points."amplifier.modules"]
@@ -16,5 +17,10 @@ build-backend = "hatchling.build"
 
 [dependency-groups]
 dev = [
+    "amplifier-core",
     "pytest>=8.4.2",
+    "pytest-asyncio>=1.0.0",
 ]
+
+[tool.uv.sources]
+amplifier-core = { git = "https://github.com/microsoft/amplifier-core", branch = "main" }
