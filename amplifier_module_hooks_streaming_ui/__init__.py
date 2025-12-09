@@ -3,6 +3,9 @@
 Display streaming LLM output (thinking blocks, tool calls, and token usage) to console.
 """
 
+# Amplifier module metadata
+__amplifier_module_type__ = "hook"
+
 import logging
 import sys
 from typing import Any
