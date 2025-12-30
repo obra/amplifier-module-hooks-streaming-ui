@@ -367,8 +367,8 @@ class StreamingUIHooks:
             if "\n" in value:
                 lines = value.split("\n")
                 return "|\n" + "\n".join(f"{prefix}  {line}" for line in lines)
-            # Simple strings don't need quotes unless special
-            if value and not any(c in value for c in ":#{}[]&*!|>'\","):
+            # Only quote if truly ambiguous YAML (starts with special or contains : followed by space)
+            if value and value[0] not in "-?:,[]{}#&*!|>'\"%@`" and ": " not in value:
                 return value
             return f'"{value}"'
 
@@ -377,14 +377,16 @@ class StreamingUIHooks:
                 return "[]"
             lines = []
             for item in value:
-                formatted = self._to_yaml_style(item, indent + 1)
                 if isinstance(item, dict):
-                    # First key on same line as dash
-                    first_line, *rest = formatted.split("\n")
-                    lines.append(f"{prefix}- {first_line}")
-                    lines.extend(rest)
-                else:
-                    lines.append(f"{prefix}- {formatted}")
+                    # Format dict items inline with dash
+                    dict_lines = []
+                    for i, (k, v) in enumerate(item.items()):
+                        formatted_v = self._to_yaml_style(v, indent + 2)
+                        if i == 0:
+                            dict_lines.append(f"{prefix}- {k}: {formatted_v}")
+                        else:
+                            dict_lines.append(f"{prefix}  {k}: {formatted_v}")
+                    lines.extend(dict_lines)
             return "\n".join(lines)
 
         if isinstance(value, dict):
