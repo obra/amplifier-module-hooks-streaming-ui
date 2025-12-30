@@ -231,11 +231,21 @@ class StreamingUIHooks:
         if agent_name:
             # Sub-agent tool call: status line cyan, 4-space indent, box drawing
             print(f"\n    \033[36m┌─ 🔧 [{agent_name}] Using tool: {tool_name}\033[0m")
-            print(f"    \033[36m│\033[0m  \033[2mArguments: {truncated}\033[0m")
+            # Indent each line of multi-line arguments
+            lines = truncated.split("\n")
+            first_line = f"    \033[36m│\033[0m  \033[2mArguments: {lines[0]}\033[0m"
+            print(first_line)
+            for line in lines[1:]:
+                print(f"    \033[36m│\033[0m  \033[2m           {line}\033[0m")
         else:
             # Parent tool call: status line cyan
             print(f"\n\033[36m🔧 Using tool: {tool_name}\033[0m")
-            print(f"   \033[2mArguments: {truncated}\033[0m")  # Dim text
+            # Indent each line of multi-line arguments
+            lines = truncated.split("\n")
+            first_line = f"   \033[2mArguments: {lines[0]}\033[0m"
+            print(first_line)
+            for line in lines[1:]:
+                print(f"   \033[2m           {line}\033[0m")
 
         return HookResult(action="continue")
 
