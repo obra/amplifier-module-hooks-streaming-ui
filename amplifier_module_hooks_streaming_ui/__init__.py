@@ -260,16 +260,37 @@ class StreamingUIHooks:
 
         # Extract output from result (handle different result formats)
         if isinstance(result, dict):
-            output = result.get("output")
-            # Always ensure output is a string regardless of what we got
-            if output is None:
-                # No output field, use string representation of entire result
-                output = str(result)
+            # Special handling for bash tool results
+            if "returncode" in result:
+                # Bash tool result format: {stdout, stderr, returncode}
+                stdout = result.get("stdout", "")
+                stderr = result.get("stderr", "")
+                returncode = result.get("returncode", 0)
+                
+                success = returncode == 0
+                
+                # Smart output combining:
+                # - If success and only stderr has content, show it as output
+                #   (common for git, curl, docker, etc. that write status to stderr)
+                # - If failed, show both with stderr labeled
+                if success:
+                    output = stdout or stderr or "(no output)"
+                else:
+                    output = stdout
+                    if stderr:
+                        output = f"{output}\n[stderr]: {stderr}" if output else f"[stderr]: {stderr}"
+                    output = output or "(no output)"
             else:
-                # Output exists - convert to string if it's not already
-                # This handles dicts, lists, numbers, booleans, etc.
-                output = str(output)
-            success = result.get("success", True)
+                output = result.get("output")
+                # Always ensure output is a string regardless of what we got
+                if output is None:
+                    # No output field, use string representation of entire result
+                    output = str(result)
+                else:
+                    # Output exists - convert to string if it's not already
+                    # This handles dicts, lists, numbers, booleans, etc.
+                    output = str(output)
+                success = result.get("success", True)
         else:
             # Result is not a dict, convert to string
             output = str(result) if result is not None else ""
