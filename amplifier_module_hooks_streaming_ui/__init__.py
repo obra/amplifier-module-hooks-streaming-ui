@@ -367,8 +367,9 @@ class StreamingUIHooks:
             if "\n" in value:
                 lines = value.split("\n")
                 return "|\n" + "\n".join(f"{prefix}  {line}" for line in lines)
-            # Only quote if truly ambiguous YAML (starts with special or contains : followed by space)
-            if value and value[0] not in "-?:,[]{}#&*!|>'\"%@`" and ": " not in value:
+            # Only quote if truly ambiguous YAML - very minimal set
+            # Allow: paths, globs (*), regex patterns, most normal strings
+            if value and value[0] not in "-?:,[]{}#&!|>'\"%@`" and ": " not in value:
                 return value
             return f'"{value}"'
 
@@ -378,15 +379,16 @@ class StreamingUIHooks:
             lines = []
             for item in value:
                 if isinstance(item, dict):
-                    # Format dict items inline with dash
-                    dict_lines = []
+                    # Format dict items with dash, keys aligned
                     for i, (k, v) in enumerate(item.items()):
-                        formatted_v = self._to_yaml_style(v, indent + 2)
+                        formatted_v = self._to_yaml_style(v, indent + 1)
                         if i == 0:
-                            dict_lines.append(f"{prefix}- {k}: {formatted_v}")
+                            lines.append(f"{prefix}- {k}: {formatted_v}")
                         else:
-                            dict_lines.append(f"{prefix}  {k}: {formatted_v}")
-                    lines.extend(dict_lines)
+                            lines.append(f"{prefix}  {k}: {formatted_v}")
+                else:
+                    formatted = self._to_yaml_style(item, indent + 1)
+                    lines.append(f"{prefix}- {formatted}")
             return "\n".join(lines)
 
         if isinstance(value, dict):
@@ -394,11 +396,13 @@ class StreamingUIHooks:
                 return "{}"
             lines = []
             for k, v in value.items():
-                formatted = self._to_yaml_style(v, indent + 1)
                 if isinstance(v, (dict, list)) and v:
+                    # Nested structure - put on next line, no extra indent
+                    formatted = self._to_yaml_style(v, indent)
                     lines.append(f"{prefix}{k}:")
                     lines.append(formatted)
                 else:
+                    formatted = self._to_yaml_style(v, indent + 1)
                     lines.append(f"{prefix}{k}: {formatted}")
             return "\n".join(lines)
 
