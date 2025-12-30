@@ -143,8 +143,7 @@ class TestStreamingUIHooks:
 
         captured = capsys.readouterr()
         assert "🔧 Using tool: filesystem_read" in captured.out
-        assert "Arguments:" in captured.out
-        assert "path" in captured.out
+        assert "path:" in captured.out  # YAML-style key display
 
     @pytest.mark.asyncio
     async def test_tool_post_success(self, capsys):

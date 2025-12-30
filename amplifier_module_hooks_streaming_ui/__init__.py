@@ -231,21 +231,15 @@ class StreamingUIHooks:
         if agent_name:
             # Sub-agent tool call: status line cyan, 4-space indent, box drawing
             print(f"\n    \033[36m┌─ 🔧 [{agent_name}] Using tool: {tool_name}\033[0m")
-            # Indent each line of multi-line arguments
-            lines = truncated.split("\n")
-            first_line = f"    \033[36m│\033[0m  \033[2mArguments: {lines[0]}\033[0m"
-            print(first_line)
-            for line in lines[1:]:
-                print(f"    \033[36m│\033[0m  \033[2m           {line}\033[0m")
+            # Indent each line of arguments
+            for line in truncated.split("\n"):
+                print(f"    \033[36m│\033[0m  \033[2m{line}\033[0m")
         else:
             # Parent tool call: status line cyan
             print(f"\n\033[36m🔧 Using tool: {tool_name}\033[0m")
-            # Indent each line of multi-line arguments
-            lines = truncated.split("\n")
-            first_line = f"   \033[2mArguments: {lines[0]}\033[0m"
-            print(first_line)
-            for line in lines[1:]:
-                print(f"   \033[2m           {line}\033[0m")
+            # Indent each line of arguments
+            for line in truncated.split("\n"):
+                print(f"   \033[2m{line}\033[0m")
 
         return HookResult(action="continue")
 
@@ -321,8 +315,8 @@ class StreamingUIHooks:
     def _format_for_display(self, value: Any) -> str:
         """Format any value for readable display.
 
-        Detects JSON/dict structures and formats them nicely with indentation.
-        Handles strings, dicts, lists uniformly.
+        Detects dict/list structures and formats them as YAML-style for
+        cleaner output (no quotes, no braces).
 
         Args:
             value: Any value to format
@@ -330,8 +324,6 @@ class StreamingUIHooks:
         Returns:
             Formatted string representation
         """
-        import json
-
         if value is None:
             return "(none)"
 
@@ -339,14 +331,75 @@ class StreamingUIHooks:
         if isinstance(value, str):
             return value if value else "(empty)"
 
-        # Dict or list - format as indented JSON
+        # Dict or list - format as YAML-style (cleaner than JSON)
         if isinstance(value, (dict, list)):
             try:
-                return json.dumps(value, indent=2, ensure_ascii=False)
-            except (TypeError, ValueError):
+                return self._to_yaml_style(value)
+            except Exception:
                 return str(value)
 
         # Anything else - string representation
+        return str(value)
+
+    def _to_yaml_style(self, value: Any, indent: int = 0) -> str:
+        """Convert value to YAML-style string (without pyyaml dependency).
+
+        Args:
+            value: Value to format
+            indent: Current indentation level
+
+        Returns:
+            YAML-style formatted string
+        """
+        prefix = "  " * indent
+
+        if value is None:
+            return "null"
+
+        if isinstance(value, bool):
+            return "true" if value else "false"
+
+        if isinstance(value, (int, float)):
+            return str(value)
+
+        if isinstance(value, str):
+            # Multi-line strings get block style
+            if "\n" in value:
+                lines = value.split("\n")
+                return "|\n" + "\n".join(f"{prefix}  {line}" for line in lines)
+            # Simple strings don't need quotes unless special
+            if value and not any(c in value for c in ":#{}[]&*!|>'\","):
+                return value
+            return f'"{value}"'
+
+        if isinstance(value, list):
+            if not value:
+                return "[]"
+            lines = []
+            for item in value:
+                formatted = self._to_yaml_style(item, indent + 1)
+                if isinstance(item, dict):
+                    # First key on same line as dash
+                    first_line, *rest = formatted.split("\n")
+                    lines.append(f"{prefix}- {first_line}")
+                    lines.extend(rest)
+                else:
+                    lines.append(f"{prefix}- {formatted}")
+            return "\n".join(lines)
+
+        if isinstance(value, dict):
+            if not value:
+                return "{}"
+            lines = []
+            for k, v in value.items():
+                formatted = self._to_yaml_style(v, indent + 1)
+                if isinstance(v, (dict, list)) and v:
+                    lines.append(f"{prefix}{k}:")
+                    lines.append(formatted)
+                else:
+                    lines.append(f"{prefix}{k}: {formatted}")
+            return "\n".join(lines)
+
         return str(value)
 
     def _truncate_lines(self, text: str, max_lines: int) -> str:
