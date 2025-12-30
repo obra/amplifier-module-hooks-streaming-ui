@@ -225,7 +225,7 @@ class StreamingUIHooks:
         agent_name = self._parse_agent_from_session_id(session_id)
 
         # Format tool input for display with proper formatting
-        input_str = self._format_tool_input(tool_input)
+        input_str = self._format_for_display(tool_input)
         truncated = self._truncate_lines(input_str, self.show_tool_lines)
 
         if agent_name:
@@ -270,38 +270,17 @@ class StreamingUIHooks:
 
         # Extract output from result (handle different result formats)
         if isinstance(result, dict):
-            # Get the output field (may be nested or at top level)
             raw_output = result.get("output")
             
-            # Special handling for bash tool results
-            # Bash returns: {success: bool, output: {stdout, stderr, returncode}}
-            if isinstance(raw_output, dict) and "returncode" in raw_output:
-                # Bash tool result format with nested output
-                stdout = raw_output.get("stdout", "")
-                stderr = raw_output.get("stderr", "")
-                returncode = raw_output.get("returncode", 0)
-                
+            # Check for bash-style output with returncode (special case for stdout/stderr handling)
+            bash_output = raw_output if isinstance(raw_output, dict) else result
+            if isinstance(bash_output, dict) and "returncode" in bash_output:
+                stdout = bash_output.get("stdout", "")
+                stderr = bash_output.get("stderr", "")
+                returncode = bash_output.get("returncode", 0)
                 success = returncode == 0
                 
-                # Smart output combining:
-                # - If success and only stderr has content, show it as output
-                #   (common for git, curl, docker, etc. that write status to stderr)
-                # - If failed, show both with stderr labeled
-                if success:
-                    output = stdout or stderr or "(no output)"
-                else:
-                    output = stdout
-                    if stderr:
-                        output = f"{output}\n[stderr]: {stderr}" if output else f"[stderr]: {stderr}"
-                    output = output or "(no output)"
-            elif "returncode" in result:
-                # Direct bash result format (legacy/alternate): {stdout, stderr, returncode}
-                stdout = result.get("stdout", "")
-                stderr = result.get("stderr", "")
-                returncode = result.get("returncode", 0)
-                
-                success = returncode == 0
-                
+                # Smart stdout/stderr combining based on success
                 if success:
                     output = stdout or stderr or "(no output)"
                 else:
@@ -310,17 +289,12 @@ class StreamingUIHooks:
                         output = f"{output}\n[stderr]: {stderr}" if output else f"[stderr]: {stderr}"
                     output = output or "(no output)"
             else:
-                # Standard tool result format
-                if raw_output is None:
-                    # No output field, use string representation of entire result
-                    output = str(result)
-                else:
-                    # Output exists - convert to string if it's not already
-                    output = str(raw_output)
+                # Generic handling - format nicely as JSON if dict/list
                 success = result.get("success", True)
+                output = self._format_for_display(raw_output if raw_output is not None else result)
         else:
-            # Result is not a dict, convert to string
-            output = str(result) if result is not None else ""
+            # Not a dict - format generically
+            output = self._format_for_display(result)
             success = True
 
         # Truncate output for display
@@ -344,35 +318,36 @@ class StreamingUIHooks:
 
         return HookResult(action="continue")
 
-    def _format_tool_input(self, tool_input: Any) -> str:
-        """Format tool input for readable display.
+    def _format_for_display(self, value: Any) -> str:
+        """Format any value for readable display.
 
-        Converts dicts to readable format with actual newlines instead of
-        escaped \\n characters.
+        Detects JSON/dict structures and formats them nicely with indentation.
+        Handles strings, dicts, lists uniformly.
 
         Args:
-            tool_input: Tool input (usually a dict)
+            value: Any value to format
 
         Returns:
             Formatted string representation
         """
         import json
 
-        if tool_input is None:
-            return "(no arguments)"
+        if value is None:
+            return "(none)"
 
-        if isinstance(tool_input, dict):
-            # For simple single-key dicts (like bash command), show value directly
-            if len(tool_input) == 1 and "command" in tool_input:
-                return tool_input["command"]
+        # Already a string - return as-is (preserves natural newlines)
+        if isinstance(value, str):
+            return value if value else "(empty)"
 
-            # For other dicts, use JSON with indentation for readability
+        # Dict or list - format as indented JSON
+        if isinstance(value, (dict, list)):
             try:
-                return json.dumps(tool_input, indent=2, ensure_ascii=False)
+                return json.dumps(value, indent=2, ensure_ascii=False)
             except (TypeError, ValueError):
-                return str(tool_input)
+                return str(value)
 
-        return str(tool_input)
+        # Anything else - string representation
+        return str(value)
 
     def _truncate_lines(self, text: str, max_lines: int) -> str:
         """Truncate text to max_lines with ellipsis.
