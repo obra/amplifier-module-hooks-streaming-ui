@@ -224,8 +224,8 @@ class StreamingUIHooks:
         # Detect if this is a sub-agent's tool call
         agent_name = self._parse_agent_from_session_id(session_id)
 
-        # Format tool input for display - ensure it's a string
-        input_str = str(tool_input) if tool_input is not None else ""
+        # Format tool input for display with proper formatting
+        input_str = self._format_tool_input(tool_input)
         truncated = self._truncate_lines(input_str, self.show_tool_lines)
 
         if agent_name:
@@ -343,6 +343,36 @@ class StreamingUIHooks:
             print(f"\033[2m{indented}\033[0m\n")
 
         return HookResult(action="continue")
+
+    def _format_tool_input(self, tool_input: Any) -> str:
+        """Format tool input for readable display.
+
+        Converts dicts to readable format with actual newlines instead of
+        escaped \\n characters.
+
+        Args:
+            tool_input: Tool input (usually a dict)
+
+        Returns:
+            Formatted string representation
+        """
+        import json
+
+        if tool_input is None:
+            return "(no arguments)"
+
+        if isinstance(tool_input, dict):
+            # For simple single-key dicts (like bash command), show value directly
+            if len(tool_input) == 1 and "command" in tool_input:
+                return tool_input["command"]
+
+            # For other dicts, use JSON with indentation for readability
+            try:
+                return json.dumps(tool_input, indent=2, ensure_ascii=False)
+            except (TypeError, ValueError):
+                return str(tool_input)
+
+        return str(tool_input)
 
     def _truncate_lines(self, text: str, max_lines: int) -> str:
         """Truncate text to max_lines with ellipsis.
