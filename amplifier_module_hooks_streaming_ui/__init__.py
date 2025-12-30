@@ -260,12 +260,16 @@ class StreamingUIHooks:
 
         # Extract output from result (handle different result formats)
         if isinstance(result, dict):
+            # Get the output field (may be nested or at top level)
+            raw_output = result.get("output")
+            
             # Special handling for bash tool results
-            if "returncode" in result:
-                # Bash tool result format: {stdout, stderr, returncode}
-                stdout = result.get("stdout", "")
-                stderr = result.get("stderr", "")
-                returncode = result.get("returncode", 0)
+            # Bash returns: {success: bool, output: {stdout, stderr, returncode}}
+            if isinstance(raw_output, dict) and "returncode" in raw_output:
+                # Bash tool result format with nested output
+                stdout = raw_output.get("stdout", "")
+                stderr = raw_output.get("stderr", "")
+                returncode = raw_output.get("returncode", 0)
                 
                 success = returncode == 0
                 
@@ -280,16 +284,29 @@ class StreamingUIHooks:
                     if stderr:
                         output = f"{output}\n[stderr]: {stderr}" if output else f"[stderr]: {stderr}"
                     output = output or "(no output)"
+            elif "returncode" in result:
+                # Direct bash result format (legacy/alternate): {stdout, stderr, returncode}
+                stdout = result.get("stdout", "")
+                stderr = result.get("stderr", "")
+                returncode = result.get("returncode", 0)
+                
+                success = returncode == 0
+                
+                if success:
+                    output = stdout or stderr or "(no output)"
+                else:
+                    output = stdout
+                    if stderr:
+                        output = f"{output}\n[stderr]: {stderr}" if output else f"[stderr]: {stderr}"
+                    output = output or "(no output)"
             else:
-                output = result.get("output")
-                # Always ensure output is a string regardless of what we got
-                if output is None:
+                # Standard tool result format
+                if raw_output is None:
                     # No output field, use string representation of entire result
                     output = str(result)
                 else:
                     # Output exists - convert to string if it's not already
-                    # This handles dicts, lists, numbers, booleans, etc.
-                    output = str(output)
+                    output = str(raw_output)
                 success = result.get("success", True)
         else:
             # Result is not a dict, convert to string
