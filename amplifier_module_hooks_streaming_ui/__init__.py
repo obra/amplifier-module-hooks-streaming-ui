@@ -322,11 +322,15 @@ class StreamingUIHooks:
         if agent_name:
             # Sub-agent tool result: status line cyan, 4-space indent, box drawing
             print(f"    \033[36m└─ {icon} [{agent_name}] Tool result: {tool_name}\033[0m")
-            print(f"       \033[2m{truncated}\033[0m\n")
+            # Indent each line of multi-line output
+            indented = "\n".join(f"       {line}" for line in truncated.split("\n"))
+            print(f"\033[2m{indented}\033[0m\n")
         else:
             # Parent tool result: status line cyan
             print(f"\033[36m{icon} Tool result: {tool_name}\033[0m")
-            print(f"   \033[2m{truncated}\033[0m\n")  # Dim text
+            # Indent each line of multi-line output
+            indented = "\n".join(f"   {line}" for line in truncated.split("\n"))
+            print(f"\033[2m{indented}\033[0m\n")
 
         return HookResult(action="continue")
 
