@@ -140,10 +140,16 @@ class StreamingUIHooks:
         usage = data.get("usage")  # Usage from parent response
         is_last_block = block_index == total_blocks - 1 if total_blocks else False
 
-        # Get agent name for indentation (before we delete from tracking)
-        agent_name = None
+        # Parse agent name from session_id for consistent indentation
+        # (used for both thinking blocks and token usage display)
+        session_id = data.get("session_id")
+        agent_name = self._parse_agent_from_session_id(session_id)
+
+        # Override with tracked thinking block agent if available (for consistency)
         if block_index in self.thinking_blocks:
-            agent_name = self.thinking_blocks[block_index].get("agent")
+            tracked_agent = self.thinking_blocks[block_index].get("agent")
+            if tracked_agent:
+                agent_name = tracked_agent
 
         # Display thinking block if we were tracking it
         if block_type in {"thinking", "reasoning"} and block_index is not None and block_index in self.thinking_blocks:
