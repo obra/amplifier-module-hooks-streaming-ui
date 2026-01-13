@@ -48,7 +48,9 @@ async def mount(coordinator: Any, config: dict[str, Any]) -> None:
 class StreamingUIHooks:
     """Hooks for displaying streaming UI output."""
 
-    def __init__(self, show_thinking: bool, show_tool_lines: int, show_token_usage: bool):
+    def __init__(
+        self, show_thinking: bool, show_tool_lines: int, show_token_usage: bool
+    ):
         """Initialize streaming UI hooks.
 
         Args:
@@ -92,7 +94,9 @@ class StreamingUIHooks:
         # No underscore = parent session (no agent name)
         return None
 
-    async def handle_content_block_start(self, _event: str, data: dict[str, Any]) -> HookResult:
+    async def handle_content_block_start(
+        self, _event: str, data: dict[str, Any]
+    ) -> HookResult:
         """Detect thinking blocks and prepare for display.
 
         Args:
@@ -110,11 +114,17 @@ class StreamingUIHooks:
         agent_name = self._parse_agent_from_session_id(session_id)
 
         # Only track thinking blocks if configured to show them
-        if block_type in {"thinking", "reasoning"} and self.show_thinking and block_index is not None:
+        if (
+            block_type in {"thinking", "reasoning"}
+            and self.show_thinking
+            and block_index is not None
+        ):
             self.thinking_blocks[block_index] = {"started": True, "agent": agent_name}
             if agent_name:
                 # Sub-agent thinking: status line cyan, 4-space indent
-                sys.stderr.write(f"\n    \033[36m🤔 [{agent_name}] Thinking...\033[0m\n")
+                sys.stderr.write(
+                    f"\n    \033[36m🤔 [{agent_name}] Thinking...\033[0m\n"
+                )
                 sys.stderr.flush()
             else:
                 # Parent thinking: status line cyan
@@ -123,7 +133,9 @@ class StreamingUIHooks:
 
         return HookResult(action="continue")
 
-    async def handle_content_block_end(self, _event: str, data: dict[str, Any]) -> HookResult:
+    async def handle_content_block_end(
+        self, _event: str, data: dict[str, Any]
+    ) -> HookResult:
         """Display complete thinking block and token usage.
 
         Args:
@@ -152,9 +164,17 @@ class StreamingUIHooks:
                 agent_name = tracked_agent
 
         # Display thinking block if we were tracking it
-        if block_type in {"thinking", "reasoning"} and block_index is not None and block_index in self.thinking_blocks:
+        if (
+            block_type in {"thinking", "reasoning"}
+            and block_index is not None
+            and block_index in self.thinking_blocks
+        ):
             # Extract thinking text from block
-            thinking_text = block.get("thinking", "") or block.get("text", "") or _flatten_reasoning_block(block)
+            thinking_text = (
+                block.get("thinking", "")
+                or block.get("text", "")
+                or _flatten_reasoning_block(block)
+            )
 
             if thinking_text:
                 # Display formatted thinking block with agent context
@@ -195,19 +215,36 @@ class StreamingUIHooks:
 
         # Display token usage after last block (if present and configured)
         if is_last_block and self.show_token_usage and usage:
-            # Use agent name determined earlier for indentation
             indent = "    " if agent_name else ""
 
             input_tokens = usage.get("input_tokens", 0)
             output_tokens = usage.get("output_tokens", 0)
             total_tokens = input_tokens + output_tokens
 
+            # Cache metrics
+            cache_read = usage.get("cache_read_input_tokens", 0)
+            cache_create = usage.get("cache_creation_input_tokens", 0)
+            has_cache_metrics = cache_read > 0 or cache_create > 0
+
             input_str = f"{input_tokens:,}"
             output_str = f"{output_tokens:,}"
             total_str = f"{total_tokens:,}"
 
             print(f"{indent}\033[2m│  📊 Token Usage\033[0m")
-            print(f"{indent}\033[2m└─ Input: {input_str} | Output: {output_str} | Total: {total_str}\033[0m")
+
+            if has_cache_metrics:
+                # Two-line format when cache is active
+                print(
+                    f"{indent}\033[2m├─ Input: {input_str} | Output: {output_str} | Total: {total_str}\033[0m"
+                )
+                print(
+                    f"{indent}\033[2m└─ Cache: {cache_read:,} read | {cache_create:,} created\033[0m"
+                )
+            else:
+                # Original single-line format
+                print(
+                    f"{indent}\033[2m└─ Input: {input_str} | Output: {output_str} | Total: {total_str}\033[0m"
+                )
 
         return HookResult(action="continue")
 
@@ -271,7 +308,7 @@ class StreamingUIHooks:
         # Extract output from result (handle different result formats)
         if isinstance(result, dict):
             raw_output = result.get("output")
-            
+
             # Check for bash-style output with returncode (special case for stdout/stderr handling)
             bash_output = raw_output if isinstance(raw_output, dict) else result
             if isinstance(bash_output, dict) and "returncode" in bash_output:
@@ -279,19 +316,25 @@ class StreamingUIHooks:
                 stderr = bash_output.get("stderr", "")
                 returncode = bash_output.get("returncode", 0)
                 success = returncode == 0
-                
+
                 # Smart stdout/stderr combining based on success
                 if success:
                     output = stdout or stderr or "(no output)"
                 else:
                     output = stdout
                     if stderr:
-                        output = f"{output}\n[stderr]: {stderr}" if output else f"[stderr]: {stderr}"
+                        output = (
+                            f"{output}\n[stderr]: {stderr}"
+                            if output
+                            else f"[stderr]: {stderr}"
+                        )
                     output = output or "(no output)"
             else:
                 # Generic handling - format nicely as JSON if dict/list
                 success = result.get("success", True)
-                output = self._format_for_display(raw_output if raw_output is not None else result)
+                output = self._format_for_display(
+                    raw_output if raw_output is not None else result
+                )
         else:
             # Not a dict - format generically
             output = self._format_for_display(result)
@@ -305,7 +348,9 @@ class StreamingUIHooks:
 
         if agent_name:
             # Sub-agent tool result: status line cyan, 4-space indent, box drawing
-            print(f"    \033[36m└─ {icon} [{agent_name}] Tool result: {tool_name}\033[0m")
+            print(
+                f"    \033[36m└─ {icon} [{agent_name}] Tool result: {tool_name}\033[0m"
+            )
             # Indent each line of multi-line output
             indented = "\n".join(f"       {line}" for line in truncated.split("\n"))
             print(f"\033[2m{indented}\033[0m\n")
