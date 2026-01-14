@@ -217,34 +217,40 @@ class StreamingUIHooks:
         if is_last_block and self.show_token_usage and usage:
             indent = "    " if agent_name else ""
 
+            # Get raw token counts
             input_tokens = usage.get("input_tokens", 0)
             output_tokens = usage.get("output_tokens", 0)
-            total_tokens = input_tokens + output_tokens
 
-            # Cache metrics
+            # Cache metrics (Anthropic splits input into cached/uncached buckets)
             cache_read = usage.get("cache_read_input_tokens", 0)
             cache_create = usage.get("cache_creation_input_tokens", 0)
-            has_cache_metrics = cache_read > 0 or cache_create > 0
 
-            input_str = f"{input_tokens:,}"
+            # Compute actual total input (input_tokens alone is misleading with caching)
+            # When caching is active, input_tokens is just the uncacheable portion
+            total_input = input_tokens + cache_read + cache_create
+            total_tokens = total_input + output_tokens
+
+            # Format numbers with thousands separators
+            input_str = f"{total_input:,}"
             output_str = f"{output_tokens:,}"
             total_str = f"{total_tokens:,}"
 
-            print(f"{indent}\033[2m│  📊 Token Usage\033[0m")
+            # Build cache info string if caching is active
+            cache_info = ""
+            if cache_read > 0 or cache_create > 0:
+                cache_pct = (
+                    int((cache_read / total_input) * 100) if total_input > 0 else 0
+                )
+                if cache_read > 0:
+                    cache_info = f" ({cache_pct}% cached)"
+                else:
+                    # First request - cache being created
+                    cache_info = " (caching...)"
 
-            if has_cache_metrics:
-                # Two-line format when cache is active
-                print(
-                    f"{indent}\033[2m├─ Input: {input_str} | Output: {output_str} | Total: {total_str}\033[0m"
-                )
-                print(
-                    f"{indent}\033[2m└─ Cache: {cache_read:,} read | {cache_create:,} created\033[0m"
-                )
-            else:
-                # Original single-line format
-                print(
-                    f"{indent}\033[2m└─ Input: {input_str} | Output: {output_str} | Total: {total_str}\033[0m"
-                )
+            print(f"{indent}\033[2m│  📊 Token Usage\033[0m")
+            print(
+                f"{indent}\033[2m└─ Input: {input_str}{cache_info} | Output: {output_str} | Total: {total_str}\033[0m"
+            )
 
         return HookResult(action="continue")
 
