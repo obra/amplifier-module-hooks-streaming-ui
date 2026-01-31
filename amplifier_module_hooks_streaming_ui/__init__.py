@@ -30,10 +30,15 @@ async def mount(coordinator: Any, config: dict[str, Any]) -> None:
     show_tool_lines = ui_config.get("show_tool_lines", 5)
     show_token_usage = ui_config.get("show_token_usage", True)
     thinking_decorations = ui_config.get("thinking_decorations", True)
+    token_usage_compact = ui_config.get("token_usage_compact", False)
 
     # Create hook handlers
     hooks = StreamingUIHooks(
-        show_thinking, show_tool_lines, show_token_usage, thinking_decorations
+        show_thinking,
+        show_tool_lines,
+        show_token_usage,
+        thinking_decorations,
+        token_usage_compact,
     )
 
     # Register hooks on the coordinator
@@ -57,6 +62,7 @@ class StreamingUIHooks:
         show_tool_lines: int,
         show_token_usage: bool,
         thinking_decorations: bool = True,
+        token_usage_compact: bool = False,
     ):
         """Initialize streaming UI hooks.
 
@@ -65,11 +71,13 @@ class StreamingUIHooks:
             show_tool_lines: Number of lines to show for tool I/O
             show_token_usage: Whether to display token usage
             thinking_decorations: Whether to show ====/---- decorations around thinking blocks
+            token_usage_compact: Whether to show token usage in compact single-line format
         """
         self.show_thinking = show_thinking
         self.show_tool_lines = show_tool_lines
         self.show_token_usage = show_token_usage
         self.thinking_decorations = thinking_decorations
+        self.token_usage_compact = token_usage_compact
         self.thinking_blocks: dict[int, dict[str, Any]] = {}
 
     def _parse_agent_from_session_id(self, session_id: str | None) -> str | None:
@@ -265,10 +273,19 @@ class StreamingUIHooks:
                     # First request - cache being created
                     cache_info = " (caching...)"
 
-            print(f"{indent}\033[2m│  📊 Token Usage\033[0m")
-            print(
-                f"{indent}\033[2m└─ Input: {input_str}{cache_info} | Output: {output_str} | Total: {total_str}\033[0m"
-            )
+            if self.token_usage_compact:
+                # Compact single-line format: └─ 📊 71k in (73% cached) · 340 out
+                compact_input = self._format_compact_number(total_input)
+                compact_output = self._format_compact_number(output_tokens)
+                print(
+                    f"{indent}\033[2m└─ 📊 {compact_input} in{cache_info} · {compact_output} out\033[0m"
+                )
+            else:
+                # Full two-line format with box drawing
+                print(f"{indent}\033[2m│  📊 Token Usage\033[0m")
+                print(
+                    f"{indent}\033[2m└─ Input: {input_str}{cache_info} | Output: {output_str} | Total: {total_str}\033[0m"
+                )
 
         return HookResult(action="continue")
 
@@ -386,6 +403,22 @@ class StreamingUIHooks:
             print(f"\033[2m{indented}\033[0m\n")
 
         return HookResult(action="continue")
+
+    def _format_compact_number(self, n: int) -> str:
+        """Format a number in compact form (e.g., 71096 -> '71k').
+
+        Args:
+            n: Number to format
+
+        Returns:
+            Compact string representation
+        """
+        if n >= 1_000_000:
+            return f"{n / 1_000_000:.1f}m"
+        elif n >= 1_000:
+            return f"{n / 1_000:.0f}k"
+        else:
+            return str(n)
 
     def _format_for_display(self, value: Any) -> str:
         """Format any value for readable display.
