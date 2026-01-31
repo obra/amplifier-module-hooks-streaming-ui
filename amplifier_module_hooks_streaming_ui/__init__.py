@@ -213,10 +213,9 @@ class StreamingUIHooks:
                             print(f"    \033[2m{line}\033[0m")
                         print(f"    \033[90m{'=' * 56}\033[0m\n")
                     else:
-                        # Condensed: just the content, dimmed
+                        # Condensed: just the content, dimmed (no trailing newline)
                         for line in rendered.rstrip().split("\n"):
                             print(f"    \033[2m{line}\033[0m")
-                        print()
                 else:
                     # Parent thinking
                     buffer = StringIO()
@@ -232,9 +231,8 @@ class StreamingUIHooks:
                         print(f"\033[2m{rendered.rstrip()}\033[0m")
                         print(f"\033[90m{'=' * 60}\033[0m\n")
                     else:
-                        # Condensed: just the content, dimmed
+                        # Condensed: just the content, dimmed (no trailing newline)
                         print(f"\033[2m{rendered.rstrip()}\033[0m")
-                        print()
 
             # Clean up tracking
             del self.thinking_blocks[block_index]
