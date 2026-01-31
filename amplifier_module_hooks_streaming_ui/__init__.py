@@ -29,9 +29,12 @@ async def mount(coordinator: Any, config: dict[str, Any]) -> None:
     show_thinking = ui_config.get("show_thinking_stream", True)
     show_tool_lines = ui_config.get("show_tool_lines", 5)
     show_token_usage = ui_config.get("show_token_usage", True)
+    thinking_decorations = ui_config.get("thinking_decorations", True)
 
     # Create hook handlers
-    hooks = StreamingUIHooks(show_thinking, show_tool_lines, show_token_usage)
+    hooks = StreamingUIHooks(
+        show_thinking, show_tool_lines, show_token_usage, thinking_decorations
+    )
 
     # Register hooks on the coordinator
     coordinator.hooks.register("content_block:start", hooks.handle_content_block_start)
@@ -49,7 +52,11 @@ class StreamingUIHooks:
     """Hooks for displaying streaming UI output."""
 
     def __init__(
-        self, show_thinking: bool, show_tool_lines: int, show_token_usage: bool
+        self,
+        show_thinking: bool,
+        show_tool_lines: int,
+        show_token_usage: bool,
+        thinking_decorations: bool = True,
     ):
         """Initialize streaming UI hooks.
 
@@ -57,10 +64,12 @@ class StreamingUIHooks:
             show_thinking: Whether to display thinking blocks
             show_tool_lines: Number of lines to show for tool I/O
             show_token_usage: Whether to display token usage
+            thinking_decorations: Whether to show ====/---- decorations around thinking blocks
         """
         self.show_thinking = show_thinking
         self.show_tool_lines = show_tool_lines
         self.show_token_usage = show_token_usage
+        self.thinking_decorations = thinking_decorations
         self.thinking_blocks: dict[int, dict[str, Any]] = {}
 
     def _parse_agent_from_session_id(self, session_id: str | None) -> str | None:
@@ -178,37 +187,46 @@ class StreamingUIHooks:
 
             if thinking_text:
                 # Display formatted thinking block with agent context
-                if agent_name:
-                    # Sub-agent thinking: dark gray, 4-space indent, markdown wrapped in dim ANSI codes
-                    print(f"\n    \033[90m{'=' * 56}\033[0m")
-                    print(f"    \033[90m[{agent_name}] Thinking:\033[0m")
-                    print(f"    \033[90m{'-' * 56}\033[0m")
-                    # Render markdown and wrap each line in dim ANSI code with indent
-                    from io import StringIO
+                from io import StringIO
 
+                if agent_name:
+                    # Sub-agent thinking
                     buffer = StringIO()
                     temp_console = Console(file=buffer, highlight=False, width=52)
                     temp_console.print(Markdown(thinking_text))
                     rendered = buffer.getvalue()
-                    for line in rendered.rstrip().split("\n"):
-                        # Wrap each line in dim ANSI code (same approach as tool results)
-                        print(f"    \033[2m{line}\033[0m")
-                    print(f"    \033[90m{'=' * 56}\033[0m\n")
-                else:
-                    # Parent thinking: markdown rendered and wrapped in dim ANSI codes
-                    from io import StringIO
 
+                    if self.thinking_decorations:
+                        # Full decorations: dark gray, 4-space indent
+                        print(f"\n    \033[90m{'=' * 56}\033[0m")
+                        print(f"    \033[90m[{agent_name}] Thinking:\033[0m")
+                        print(f"    \033[90m{'-' * 56}\033[0m")
+                        for line in rendered.rstrip().split("\n"):
+                            print(f"    \033[2m{line}\033[0m")
+                        print(f"    \033[90m{'=' * 56}\033[0m\n")
+                    else:
+                        # Condensed: just the content, dimmed
+                        for line in rendered.rstrip().split("\n"):
+                            print(f"    \033[2m{line}\033[0m")
+                        print()
+                else:
+                    # Parent thinking
                     buffer = StringIO()
                     temp_console = Console(file=buffer, highlight=False, width=60)
                     temp_console.print(Markdown(thinking_text))
                     rendered = buffer.getvalue()
 
-                    print(f"\n\033[90m{'=' * 60}\033[0m")
-                    print("\033[90mThinking:\033[0m")
-                    print(f"\033[90m{'-' * 60}\033[0m")
-                    # Wrap markdown in dim ANSI code (same approach as tool results)
-                    print(f"\033[2m{rendered.rstrip()}\033[0m")
-                    print(f"\033[90m{'=' * 60}\033[0m\n")
+                    if self.thinking_decorations:
+                        # Full decorations
+                        print(f"\n\033[90m{'=' * 60}\033[0m")
+                        print("\033[90mThinking:\033[0m")
+                        print(f"\033[90m{'-' * 60}\033[0m")
+                        print(f"\033[2m{rendered.rstrip()}\033[0m")
+                        print(f"\033[90m{'=' * 60}\033[0m\n")
+                    else:
+                        # Condensed: just the content, dimmed
+                        print(f"\033[2m{rendered.rstrip()}\033[0m")
+                        print()
 
             # Clean up tracking
             del self.thinking_blocks[block_index]
